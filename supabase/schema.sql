@@ -1,0 +1,476 @@
+-- ============================================================
+--  Campus Food Court — Supabase schema
+--  Paste this whole file into: Supabase Dashboard → SQL Editor → Run
+-- ============================================================
+
+create extension if not exists pgcrypto;
+
+-- ---------- counters / helpers ----------
+create or replace function istoday() returns date
+language sql stable as $$
+  select (now() at time zone 'Asia/Kolkata')::date
+$$;
+
+-- ---------- tables ----------
+create table if not exists admins (
+  id         int primary key generated always as identity,
+  username   text not null unique,
+  pass_hash  text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists admin_sessions (
+  token      uuid primary key default gen_random_uuid(),
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+create table if not exists items (
+  id         bigint primary key generated always as identity,
+  name       text not null check (length(btrim(name)) between 1 and 60),
+  emoji      text not null default '🍽️',
+  category   text not null default 'Snacks',
+  price      bigint not null check (price > 0 and price <= 100000000),   -- paise
+  stock      int not null default 0 check (stock >= 0),
+  available  boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists orders (
+  id           bigint primary key generated always as identity,
+  token_no     int not null,
+  section      text not null check (section in ('boys','girls')),
+  status       text not null default 'placed' check (status in ('placed','completed','cancelled')),
+  total        bigint not null,
+  client_token text not null unique,
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now(),
+  created_day  date not null default istoday(),
+  unique (token_no, section, created_day)
+);
+create index if not exists idx_orders_board on orders (section, status, created_day);
+
+create table if not exists order_items (
+  id         bigint primary key generated always as identity,
+  order_id   bigint not null references orders(id) on delete cascade,
+  item_id    bigint,
+  name       text not null,
+  emoji      text,
+  price      bigint not null,
+  qty        int not null check (qty > 0),
+  line_total bigint not null
+);
+create index if not exists idx_order_items_order on order_items (order_id);
+
+-- ---------- default admin ----------
+insert into admins (username, pass_hash)
+values ('admin', crypt('admin123', gen_salt('bf')))
+on conflict (username) do nothing;
+
+-- ---------- row level security ----------
+alter table admins        enable row level security;
+alter table admin_sessions enable row level security;
+alter table items          enable row level security;
+alter table orders         enable row level security;
+alter table order_items    enable row level security;
+
+-- Public may READ the menu and orders (needed for live boards).
+-- Nobody writes directly — all writes happen through the secure
+-- functions below (security definer), which do their own checks.
+drop policy if exists "items_read"   on items;
+drop policy if exists "orders_read"  on orders;
+drop policy if exists "oitems_read"  on order_items;
+create policy "items_read"  on items       for select using (true);
+create policy "orders_read" on orders      for select using (true);
+create policy "oitems_read" on order_items for select using (true);
+
+-- ---------- realtime ----------
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table orders;
+  exception when duplicate_object then null;
+  end;
+end $$;
+
+-- ============================================================
+--  ORDERING (public)
+-- ============================================================
+create or replace function order_full(p_order_id bigint) returns jsonb
+language sql stable security definer set search_path = public as $$
+  select to_jsonb(t)
+  from (
+    select o.id,
+           o.token_no as "tokenNo",
+           o.section,
+           o.status,
+           o.total,
+           o.client_token as "clientToken",
+           o.created_at as "createdAt",
+           (select coalesce(jsonb_agg(jsonb_build_object(
+              'name', oi.name, 'emoji', oi.emoji, 'price', oi.price,
+              'qty', oi.qty, 'lineTotal', oi.line_total) order by oi.id), '[]')
+            from order_items oi where oi.order_id = o.id) as items
+    from orders o where o.id = p_order_id
+  ) t
+$$;
+
+create or replace function place_order(
+  p_section text, p_client_token text, p_items jsonb
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_item      items%rowtype;
+  v_el        jsonb;
+  v_id        bigint;
+  v_qty       int;
+  v_total     bigint := 0;
+  v_order_id  bigint;
+  v_result    jsonb;
+begin
+  if p_section not in ('boys','girls') then
+    raise exception 'Invalid counter';
+  end if;
+  if p_client_token !~ '^[A-Za-z0-9_-]{8,64}$' then
+    raise exception 'Bad request token';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) <> 'array'
+     or jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 50 then
+    raise exception 'Your cart is empty';
+  end if;
+
+  -- idempotency: same device token → same order back
+  select id into v_order_id from orders where client_token = p_client_token;
+  if found then
+    return order_full(v_order_id);
+  end if;
+
+  -- serialize order creation per counter/day so numbers stay gapless
+  perform pg_advisory_xact_lock(hashtext('order|' || p_section || '|' || istoday()::text));
+
+  -- validate cart & lock stock rows
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id  := (v_el->>'itemId')::bigint;
+    v_qty := coalesce((v_el->>'qty')::int, 0);
+    if v_qty < 1 or v_qty > 50 then raise exception 'Invalid quantity'; end if;
+    select * into v_item from items where id = v_id for update;
+    if not found then raise exception 'Something in your cart was just removed'; end if;
+    if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
+    if v_item.stock < v_qty then
+      if v_item.stock = 0 then raise exception '"%" just went out of stock', v_item.name;
+      else raise exception 'Only % left of "%" ', v_item.stock, v_item.name;
+      end if;
+    end if;
+    v_total := v_total + v_item.price * v_qty;
+  end loop;
+
+  -- per-counter daily number: B-1.. G-1..
+  insert into orders (token_no, section, status, total, client_token, created_day)
+  values (
+    coalesce((select max(token_no) from orders
+              where section = p_section and created_day = istoday()), 0) + 1,
+    p_section, 'placed', v_total, p_client_token, istoday()
+  ) returning id into v_order_id;
+
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id  := (v_el->>'itemId')::bigint;
+    v_qty := (v_el->>'qty')::int;
+    select * into v_item from items where id = v_id;
+    insert into order_items (order_id, item_id, name, emoji, price, qty, line_total)
+    values (v_order_id, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price * v_qty);
+    update items set stock = stock - v_qty, updated_at = now() where id = v_id;
+  end loop;
+
+  v_result := order_full(v_order_id);
+  return v_result;
+end $$;
+
+create or replace function my_orders(p_tokens text[]) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  t text;
+begin
+  foreach t in array p_tokens loop
+    if t !~ '^[A-Za-z0-9_-]{8,64}$' then
+      raise exception 'Bad request token';
+    end if;
+  end loop;
+  return coalesce((
+    select jsonb_agg(order_full(o.id) order by o.id desc)
+    from orders o where o.client_token = any(p_tokens) limit 50
+  ), '[]');
+end $$;
+
+create or replace function counter_board(p_section text) returns jsonb
+language plpgsql stable security definer set search_path = public as $$
+declare
+  v_active   jsonb;
+  v_done     jsonb;
+  v_count    int;
+  v_revenue  bigint;
+begin
+  if p_section not in ('boys','girls') then raise exception 'Invalid counter'; end if;
+
+  select coalesce(jsonb_agg(order_full(o.id) order by o.id), '[]')
+    into v_active
+  from orders o
+  where o.section = p_section and o.status = 'placed';
+
+  select count(*)::int, coalesce(sum(o.total), 0)
+    into v_count, v_revenue
+  from orders o
+  where o.section = p_section and o.created_day = istoday()
+    and o.status in ('completed','cancelled');
+
+  select coalesce(jsonb_agg(order_full(o.id) order by o.id desc), '[]')
+    into v_done
+  from orders o
+  where o.section = p_section and o.created_day = istoday()
+    and o.status in ('completed','cancelled')
+    and o.updated_at > now() - interval '12 hours';
+
+  return jsonb_build_object(
+    'active', v_active,
+    'doneToday', jsonb_build_object('count', v_count, 'revenue', v_revenue),
+    'doneOrders', v_done
+  );
+end $$;
+
+create or replace function set_order_status(p_order_id bigint, p_status text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_cur text;
+begin
+  if not (p_status = any(array['completed','cancelled'])) then
+    raise exception 'Unknown status';
+  end if;
+  select status into v_cur from orders where id = p_order_id;
+  if not found then raise exception 'Order not found'; end if;
+  if v_cur <> 'placed' then
+    raise exception 'This order is already %', v_cur;
+  end if;
+
+  update orders
+     set status = p_status, updated_at = now()
+   where id = p_order_id;
+
+  if p_status = 'cancelled' then
+    update items i
+       set stock = i.stock + oi.qty, updated_at = now()
+      from order_items oi
+     where oi.order_id = p_order_id and oi.item_id = i.id;
+  end if;
+
+  return order_full(p_order_id);
+end $$;
+
+create or replace function cancel_order(p_order_id bigint, p_client_token text default null) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_o orders%rowtype;
+begin
+  select * into v_o from orders where id = p_order_id;
+  if not found then raise exception 'Order not found'; end if;
+  if v_o.status <> 'placed' then
+    raise exception 'This order is already %';
+  end if;
+  -- a sender may only cancel with their own device token;
+  -- counter staff call it without a token
+  if p_client_token is not null and p_client_token <> '' and p_client_token <> v_o.client_token then
+    raise exception 'Not allowed';
+  end if;
+  return set_order_status(p_order_id, 'cancelled');
+end $$;
+
+-- ============================================================
+--  ADMIN (all verified by session token)
+-- ============================================================
+create or replace function admin_verify(p_token text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from admin_sessions where expires_at < now();
+  if p_token is null or
+     not exists (select 1 from admin_sessions
+                 where token::text = p_token and expires_at > now()) then
+    raise exception 'SESSION_EXPIRED: please log in again';
+  end if;
+end $$;
+
+create or replace function admin_login(p_username text, p_password text) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row admins%rowtype;
+  v_token uuid;
+begin
+  select * into v_row from admins where username = btrim(p_username);
+  if not found or v_row.pass_hash <> crypt(p_password, v_row.pass_hash) then
+    raise exception 'Wrong username or password';
+  end if;
+  delete from admin_sessions where expires_at < now();
+  insert into admin_sessions (expires_at) values (now() + interval '30 days')
+  returning token into v_token;
+  return v_token::text;
+end $$;
+
+create or replace function admin_logout(p_token text) returns void
+language sql security definer set search_path = public as $$
+  delete from admin_sessions where token::text = p_token;
+$$;
+
+create or replace function admin_change_password(p_token text, p_current text, p_new text) returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  v_row admins%rowtype;
+begin
+  perform admin_verify(p_token);
+  if length(coalesce(p_new,'')) < 6 then
+    raise exception 'New password must be at least 6 characters';
+  end if;
+  select * into v_row from admins order by id limit 1;
+  if v_row.pass_hash <> crypt(p_current, v_row.pass_hash) then
+    raise exception 'Current password is wrong';
+  end if;
+  update admins set pass_hash = crypt(p_new, gen_salt('bf')) where id = v_row.id;
+  -- log out every other device
+  delete from admin_sessions where token::text <> p_token;
+end $$;
+
+create or replace function admin_save_item(p_token text, p_item jsonb) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_id     bigint;
+  v_name   text;
+  v_emoji  text;
+  v_cat    text;
+  v_price  bigint;
+  v_stock  int;
+  v_avail  boolean;
+  v_row    items%rowtype;
+begin
+  perform admin_verify(p_token);
+  v_id    := nullif(p_item->>'id','')::bigint;
+  v_name  := btrim(coalesce(p_item->>'name',''));
+  v_emoji := coalesce(nullif(btrim(p_item->>'emoji'),''), '🍽️');
+  v_cat   := coalesce(btrim(nullif(p_item->>'category','')), 'Snacks');
+  v_price := round(coalesce((p_item->>'price')::numeric, 0) * 100)::bigint;
+  v_stock := coalesce((p_item->>'stock')::int, 0);
+  v_avail := coalesce((p_item->>'available')::boolean, true);
+
+  if length(v_name) < 1 or length(v_name) > 60 then raise exception 'Item name is required'; end if;
+  if v_price <= 0 then raise exception 'Enter a valid price in ₹'; end if;
+  if v_stock < 0 or v_stock > 100000 then raise exception 'Stock must be between 0 and 100000'; end if;
+  if length(v_cat) > 30 then raise exception 'Category is too long'; end if;
+
+  if v_id is null then
+    insert into items (name, emoji, category, price, stock, available)
+    values (v_name, v_emoji, v_cat, v_price, v_stock, v_avail)
+    returning * into v_row;
+  else
+    update items set name=v_name, emoji=v_emoji, category=v_cat, price=v_price,
+                     stock=v_stock, available=v_avail, updated_at=now()
+    where id = v_id returning * into v_row;
+    if not found then raise exception 'Item not found'; end if;
+  end if;
+  return to_jsonb(v_row);
+end $$;
+
+create or replace function admin_delete_item(p_token text, p_id bigint) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform admin_verify(p_token);
+  delete from items where id = p_id;
+  if not found then raise exception 'Item not found'; end if;
+end $$;
+
+create or replace function admin_list_items(p_token text) returns jsonb
+language sql security definer set search_path = public as $$
+  select coalesce(jsonb_agg(x order by x.category, x.name), '[]')
+  from (
+    select i.*, coalesce(s.sold, 0) as sold
+    from items i
+    left join (select item_id, sum(qty) sold from order_items group by item_id) s
+      on s.item_id = i.id
+  ) x
+  where admin_verify_ok(p_token);
+$$;
+
+create or replace function admin_verify_ok(p_token text) returns boolean
+language plpgsql security definer set search_path = public as $$
+begin
+  perform admin_verify(p_token);
+  return true;
+end $$;
+
+create or replace function admin_stats(p_token text, p_range text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_from  date;
+  v_rev   bigint; v_cnt bigint; v_sold bigint; v_canc bigint;
+  v_sec   jsonb;  v_top jsonb; v_low jsonb;
+begin
+  perform admin_verify(p_token);
+  if p_range = 'today' then v_from := istoday();
+  elsif p_range = 'week' then v_from := istoday() - 6;
+  else v_from := null; end if;
+
+  select coalesce(sum(total),0), count(*) into v_rev, v_cnt
+  from orders
+  where status <> 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(sum(oi.qty),0) into v_sold
+  from order_items oi join orders o on o.id = oi.order_id
+  where o.status <> 'cancelled' and (v_from is null or o.created_day >= v_from);
+
+  select count(*) into v_canc from orders
+  where status = 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(jsonb_build_object(
+           'boys',  jsonb_build_object('revenue', coalesce(sum(total) filter (where section='boys'),0), 'orders', count(*) filter (where section='boys')),
+           'girls', jsonb_build_object('revenue', coalesce(sum(total) filter (where section='girls'),0), 'orders', count(*) filter (where section='girls')))
+         ), jsonb_build_object('boys', jsonb_build_object('revenue',0,'orders',0), 'girls', jsonb_build_object('revenue',0,'orders',0))) into v_sec
+  from orders where status <> 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'name', t.name, 'emoji', t.emoji, 'sold', t.sold, 'revenue', t.revenue) order by t.sold desc), '[]')
+    into v_top
+  from (
+    select oi.name, max(oi.emoji) emoji, sum(oi.qty) sold, sum(oi.line_total) revenue
+    from order_items oi join orders o on o.id = oi.order_id
+    where o.status <> 'cancelled' and (v_from is null or o.created_day >= v_from)
+    group by oi.name order by sold desc limit 10
+  ) t;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', i.id, 'name', i.name, 'emoji', i.emoji, 'stock', i.stock) order by i.stock), '[]')
+    into v_low
+  from items i where i.stock <= 5;
+
+  return jsonb_build_object(
+    'range', coalesce(p_range,'all'),
+    'revenue', v_rev, 'orders', v_cnt, 'totalSold', v_sold, 'cancelled', v_canc,
+    'sections', v_sec,
+    'topItems', v_top,
+    'lowStock', v_low
+  );
+end $$;
+
+create or replace function admin_orders_list(
+  p_token text, p_section text, p_status text, p_today boolean
+) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  v_out jsonb;
+begin
+  perform admin_verify(p_token);
+  select coalesce(jsonb_agg(order_full(o.id) order by o.id desc), '[]')
+    into v_out
+  from (
+    select * from orders
+    where (p_section = 'all' or section = p_section)
+      and (p_status  = 'all' or status  = p_status)
+      and (not p_today  or created_day = istoday())
+    order by id desc limit 500
+  ) o;
+  return v_out;
+end $$;
