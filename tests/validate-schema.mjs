@@ -8,6 +8,27 @@ const ok = (cond, msg) => { if (cond) { pass++; console.log('  \u2713 ' + msg) }
 console.log('— structure —')
 const dollars = (sql.match(/\$\$/g) || []).length
 ok(dollars % 2 === 0, `dollar-quotes balanced (${dollars})`)
+
+/* parenthesis depth walk (quote/comment/dollar aware) — catches unbalanced parens */
+{
+  let depth = 0, inQ = false, inDollar = false, inLine = false, minDepth = 0
+  const negatives = []
+  let line = 1
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i], next = sql[i + 1]
+    if (ch === '\n') { line++; inLine = false; continue }
+    if (inLine) continue
+    if (ch === '-' && next === '-') { inLine = true; continue }
+    if (inDollar) { if (sql.slice(i, i + 2) === '$$') { inDollar = false; i++ } continue }
+    if (inQ) { if (ch === "'") { if (next === "'") i++; else inQ = false } continue }
+    if (ch === "'") { inQ = true; continue }
+    if (sql.slice(i, i + 2) === '$$') { inDollar = true; i++; continue }
+    if (ch === '(') depth++
+    else if (ch === ')') { depth--; if (depth < 0 && negatives.length < 3) negatives.push(line) }
+  }
+  ok(depth === 0 && negatives.length === 0,
+    `parentheses balanced end-to-end (final depth ${depth}${negatives.length ? `, went NEGATIVE at line(s) ${negatives}` : ''})`)
+}
 const begins = (sql.match(/\bbegin\b/gi) || []).length
 const ends = (sql.match(/\bend\b(?!\s*if\b)/gi) || []).length
 console.log(`  ℹ begin: ${begins}, end/end-if blocks: ${ends} (informational)`)

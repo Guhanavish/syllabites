@@ -437,7 +437,7 @@ begin
 
   select coalesce(jsonb_build_object(
            'boys',  jsonb_build_object('revenue', coalesce(sum(total) filter (where section='boys'),0), 'orders', count(*) filter (where section='boys')),
-           'girls', jsonb_build_object('revenue', coalesce(sum(total) filter (where section='girls'),0), 'orders', count(*) filter (where section='girls')))
+           'girls', jsonb_build_object('revenue', coalesce(sum(total) filter (where section='girls'),0), 'orders', count(*) filter (where section='girls'))
          ), jsonb_build_object('boys', jsonb_build_object('revenue',0,'orders',0), 'girls', jsonb_build_object('revenue',0,'orders',0))) into v_sec
   from orders where status <> 'cancelled' and (v_from is null or created_day >= v_from);
 
