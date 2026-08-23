@@ -100,7 +100,7 @@ end $$;
 --  ORDERING (public)
 -- ============================================================
 create or replace function order_full(p_order_id bigint) returns jsonb
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, extensions as $$
   select to_jsonb(t)
   from (
     select o.id,
@@ -121,7 +121,7 @@ $$;
 create or replace function place_order(
   p_section text, p_client_token text, p_items jsonb
 ) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_item      items%rowtype;
   v_el        jsonb;
@@ -195,7 +195,7 @@ exception
 end $$;
 
 create or replace function my_orders(p_tokens text[]) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql stable security definer set search_path = public, extensions as $$
 declare
   t text;
 begin
@@ -215,7 +215,7 @@ begin
 end $$;
 
 create or replace function counter_board(p_section text) returns jsonb
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql stable security definer set search_path = public, extensions as $$
 declare
   v_active   jsonb;
   v_done     jsonb;
@@ -250,7 +250,7 @@ begin
 end $$;
 
 create or replace function set_order_status(p_order_id bigint, p_status text) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_cur text;
 begin
@@ -278,7 +278,7 @@ begin
 end $$;
 
 create or replace function cancel_order(p_order_id bigint, p_client_token text default null) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_o orders%rowtype;
 begin
@@ -299,7 +299,7 @@ end $$;
 --  ADMIN (all verified by session token)
 -- ============================================================
 create or replace function admin_verify(p_token text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   delete from admin_sessions where expires_at < now();
   if p_token is null or
@@ -310,7 +310,7 @@ begin
 end $$;
 
 create or replace function admin_login(p_username text, p_password text) returns text
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_row admins%rowtype;
   v_token uuid;
@@ -326,12 +326,12 @@ begin
 end $$;
 
 create or replace function admin_logout(p_token text) returns void
-language sql security definer set search_path = public as $$
+language sql security definer set search_path = public, extensions as $$
   delete from admin_sessions where token::text = p_token;
 $$;
 
 create or replace function admin_change_password(p_token text, p_current text, p_new text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_row admins%rowtype;
 begin
@@ -349,7 +349,7 @@ begin
 end $$;
 
 create or replace function admin_save_item(p_token text, p_item jsonb) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id     bigint;
   v_name   text;
@@ -388,7 +388,7 @@ begin
 end $$;
 
 create or replace function admin_delete_item(p_token text, p_id bigint) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform admin_verify(p_token);
   delete from items where id = p_id;
@@ -396,7 +396,7 @@ begin
 end $$;
 
 create or replace function admin_list_items(p_token text) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_out jsonb;
 begin
@@ -413,7 +413,7 @@ begin
 end $$;
 
 create or replace function admin_stats(p_token text, p_range text) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_from  date;
   v_rev   bigint; v_cnt bigint; v_sold bigint; v_canc bigint;
@@ -468,7 +468,7 @@ end $$;
 create or replace function admin_orders_list(
   p_token text, p_section text, p_status text, p_today boolean
 ) returns jsonb
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_out jsonb;
 begin

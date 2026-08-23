@@ -9,6 +9,15 @@ console.log('— structure —')
 const dollars = (sql.match(/\$\$/g) || []).length
 ok(dollars % 2 === 0, `dollar-quotes balanced (${dollars})`)
 
+/* every security definer function must include the extensions schema in
+   its search_path, or pgcrypto's crypt()/gen_salt() are invisible */
+{
+  const defs = [...sql.matchAll(/create or replace function[^$]*?security definer\s+set search_path = ([^$]*?)as \$/gi)]
+  const missing = defs.filter((d) => !/extensions/.test(d[1]))
+  ok(missing.length === 0, `all ${defs.length} security-definer functions include extensions schema in search_path`
+    + (missing.length ? ' — MISSING: lines ' + missing.map((d) => sql.slice(0, d.index).split('\n').length).join(', ') : ''))
+}
+
 /* parenthesis depth walk (quote/comment/dollar aware) — catches unbalanced parens */
 {
   let depth = 0, inQ = false, inDollar = false, inLine = false, minDepth = 0
