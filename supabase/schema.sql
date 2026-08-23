@@ -384,22 +384,20 @@ begin
 end $$;
 
 create or replace function admin_list_items(p_token text) returns jsonb
-language sql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public as $$
+declare
+  v_out jsonb;
+begin
+  perform admin_verify(p_token);
   select coalesce(jsonb_agg(x order by x.category, x.name), '[]')
+    into v_out
   from (
     select i.*, coalesce(s.sold, 0) as sold
     from items i
     left join (select item_id, sum(qty) sold from order_items group by item_id) s
       on s.item_id = i.id
-  ) x
-  where admin_verify_ok(p_token);
-$$;
-
-create or replace function admin_verify_ok(p_token text) returns boolean
-language plpgsql security definer set search_path = public as $$
-begin
-  perform admin_verify(p_token);
-  return true;
+  ) x;
+  return v_out;
 end $$;
 
 create or replace function admin_stats(p_token text, p_range text) returns jsonb
