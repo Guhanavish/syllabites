@@ -3,7 +3,7 @@ import './globals.css'
 import { UiHost } from '@/lib/ui'
 
 export const metadata: Metadata = {
-  title: 'Savora · Campus Food Court',
+  title: 'Syllabites · Campus Food Court',
   description: 'Phone-first food court ordering — Boys & Girls counters',
 }
 export const viewport: Viewport = {

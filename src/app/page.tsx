@@ -36,7 +36,7 @@ export default function Landing() {
         <span className="float" style={{ bottom: 16, right: 64, animationDelay: '1.4s' }}>🥤</span>
         <span className="float" style={{ top: 44, right: 120, animationDelay: '.7s' }}>🍚</span>
         <span className="logo">🍽️</span>
-        <h1>Savora</h1>
+        <h1>Syllabites</h1>
         <p>The campus food court, reimagined — fresh orders, zero queue.</p>
       </div>
 

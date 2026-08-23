@@ -175,7 +175,7 @@ export default function SenderPage() {
       <header className="topbar">
         <div className="sec-chip">{section === 'boys' ? '👦' : '👧'}</div>
         <div className="titles">
-          <h1>Savora</h1>
+          <h1>Syllabites</h1>
           <div className="sub">{section === 'boys' ? 'Boys' : 'Girls'} side · Order from your phone</div>
         </div>
         <button className="icon-btn" onClick={() => setTab('orders')} aria-label="My orders">

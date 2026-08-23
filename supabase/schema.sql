@@ -273,7 +273,7 @@ begin
   select * into v_o from orders where id = p_order_id;
   if not found then raise exception 'Order not found'; end if;
   if v_o.status <> 'placed' then
-    raise exception 'This order is already %';
+    raise exception 'This order is already served or cancelled';
   end if;
   -- a sender may only cancel with their own device token;
   -- counter staff call it without a token

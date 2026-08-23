@@ -1,4 +1,4 @@
-# Savora 🍽️
+# Syllabites 🍽️
 
 **The campus food court, reimagined.**
 Phone-first ordering for Boys & Girls counters — built with Next.js + Supabase.
