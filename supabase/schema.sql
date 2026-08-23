@@ -90,7 +90,9 @@ do $$
 begin
   begin
     alter publication supabase_realtime add table orders;
-  exception when duplicate_object then null;
+  exception
+    when duplicate_object then null;   -- already added
+    when undefined_object then null;   -- publication missing (realtime off)
   end;
 end $$;
 
@@ -184,6 +186,12 @@ begin
 
   v_result := order_full(v_order_id);
   return v_result;
+exception
+  when unique_violation then
+    -- lost a race against an identical submission: return that order instead
+    select id into v_order_id from orders where client_token = p_client_token;
+    if found then return order_full(v_order_id); end if;
+    raise;
 end $$;
 
 create or replace function my_orders(p_tokens text[]) returns jsonb
@@ -198,7 +206,11 @@ begin
   end loop;
   return coalesce((
     select jsonb_agg(order_full(o.id) order by o.id desc)
-    from orders o where o.client_token = any(p_tokens) limit 50
+    from (
+      select id from orders
+      where client_token = any(p_tokens)
+      order by id desc limit 50
+    ) o
   ), '[]');
 end $$;
 
