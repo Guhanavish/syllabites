@@ -27,5 +27,8 @@ export async function rpcResponse<T>(
 export function cleanMsg(msg: string): string {
   // PostgREST prefixes our exceptions — show just the friendly part
   if (msg.startsWith('SESSION_EXPIRED')) return 'Session expired — please log in again'
+  if (/could not find the (function|table)/i.test(msg) || msg.includes('PGRST202') || msg.includes('PGRST205')) {
+    return 'Database not set up yet — open your Supabase dashboard → SQL Editor → paste & Run G:\\Foodcourt\\web\\supabase\\schema.sql'
+  }
   return msg.replace(/^error:/i, '').trim()
 }
