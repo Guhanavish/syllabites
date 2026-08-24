@@ -104,8 +104,8 @@ ok(routeCalls >= 14, `checked ${routeCalls} rpc calls across routes`)
 /* forward references inside LANGUAGE sql functions */
 console.log('— forward references (LANGUAGE sql) —')
 const fns = []
-for (const m of sql.matchAll(/create or replace function\s+(\w+)\s*\([^$]*?language\s+(sql|plpgsql)[^$]*?\$\$([\s\S]*?)\$\$/gi)) {
-  fns.push({ name: m[1].toLowerCase(), lang: m[2].toLowerCase(), line: sql.slice(0, m.index).split('\n').length, body: m[3] })
+for (const m of sql.matchAll(/create or replace function\s+(\w+)\s*\(([^$]*?)language\s+(sql|plpgsql)[^$]*?\$\$([\s\S]*?)\$\$/gi)) {
+  fns.push({ name: m[1].toLowerCase(), line: sql.slice(0, m.index).split('\n').length, body: m[4] })
 }
 let fwdChecked = 0
 for (const f of fns.filter((x) => x.lang === 'sql')) {
@@ -117,6 +117,23 @@ for (const f of fns.filter((x) => x.lang === 'sql')) {
     }
   }
 }
+
+/* PER-FUNCTION BODY parenthesis balance — each $$ body must net zero */
+console.log('— function body parentheses —')
+let bodyChecked = 0
+for (const f of fns) {
+  let depth = 0, inQ = false, min = 0
+  for (let i = 0; i < f.body.length; i++) {
+    const ch = f.body[i], next = f.body[i + 1]
+    if (ch === "'") { if (inQ && next === "'") i++; else inQ = !inQ; continue }
+    if (inQ) continue
+    if (ch === '(') depth++
+    else if (ch === ')') { depth--; if (depth < min) min = depth }
+  }
+  bodyChecked++
+  ok(depth === 0 && min >= 0, `${f.name}(): parens ${depth === 0 ? 'balanced' : `IMBALANCE (net ${depth})`}${min < 0 ? ', closes early!' : ''}`)
+}
+ok(bodyChecked > 0, `checked ${bodyChecked} function bodies`)
 
 /* order_full keys vs frontend expectations */
 console.log('— returned jsonb shape —')

@@ -606,10 +606,15 @@ create or replace function admin_create_backup(p_token text, p_label text defaul
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_id bigint;
+  v_label text;
 begin
   perform admin_verify(p_token);
+  v_label := nullif(btrim(p_label, ''), '');
+if v_label is null then
+    v_label := 'Manual backup';
+  end if;
   insert into backups (label, payload)
-  values (coalesce(nullif(btrim(p_label, '')), 'Manual backup'), backup_payload())
+  values (v_label, backup_payload())
   returning id into v_id;
   return v_id;
 end $$;
@@ -720,12 +725,17 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_backup_id bigint;
   v_counts jsonb;
+  v_label text;
 begin
   perform admin_verify(p_token);
 
   -- everything that exists right now is preserved on the server first
+  v_label := nullif(btrim(p_label, ''), '');
+  if v_label is null then
+    v_label := 'Fresh start';
+  end if;
   insert into backups (label, payload)
-  values (coalesce(nullif(btrim(p_label, '')), 'Fresh start'), backup_payload())
+  values (v_label, backup_payload())
   returning id into v_backup_id;
 
   v_counts := backup_payload();
