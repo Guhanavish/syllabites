@@ -24,6 +24,19 @@ async function api(path, { method = 'GET', body } = {}) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 async function main() {
+  console.log('— access gate —')
+  const gst = await api('/api/gate/status')
+  ok('gate status reachable', gst.status === 200 && typeof gst.data.version === 'number')
+  const gbad = await api('/api/gate/verify', { method: 'POST', body: { password: 'wrong-guess' } })
+  ok('wrong gate password rejected', gbad.status === 401)
+  const gok = await api('/api/gate/verify', { method: 'POST', body: { password: 'syllabites123' } })
+  ok('default gate password works', gok.status === 200 && typeof gok.data.version === 'number',
+    JSON.stringify(gok.data))
+  const gresetBad = await api('/api/gate/reset', {
+    method: 'POST', body: { answer: 'not-the-answer', newPassword: 'whatever1' },
+  })
+  ok('gate reset rejects wrong answer', gresetBad.status === 401)
+
   console.log('— admin auth —')
   const bad = await api('/api/admin/login', { method: 'POST', body: { username: 'admin', password: 'nope' } })
   ok('wrong password rejected', bad.status === 401)

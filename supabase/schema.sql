@@ -484,3 +484,256 @@ begin
   ) o;
   return v_out;
 end $$;
+
+
+
+-- ============================================================
+--  ACCESS GATE (common password for the whole app)
+-- ============================================================
+create table if not exists app_settings (
+  key   text primary key,
+  value text not null
+);
+
+insert into app_settings (key, value) values
+  ('gate_pass_hash',    crypt('syllabites123', gen_salt('bf'))),
+  ('gate_question',     'Enter your gmail'),
+  ('gate_answer_hash',  crypt('ssgginfotech', gen_salt('bf'))),
+  ('gate_version',      '1')
+on conflict (key) do nothing;
+
+alter table app_settings enable row level security;
+
+create or replace function gate_version() returns int
+language sql stable security definer set search_path = public, extensions as $$
+  select coalesce((select value::int from app_settings where key = 'gate_version'), 1)
+$$;
+
+create or replace function gate_verify(p_password text) returns int
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_hash text;
+begin
+  select value into v_hash from app_settings where key = 'gate_pass_hash';
+  if v_hash is null or p_password is null or crypt(p_password, v_hash) <> v_hash then
+    raise exception 'Wrong password';
+  end if;
+  return gate_version();
+end $$;
+
+create or replace function gate_reset(p_answer text, p_new_password text) returns int
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_ans text;
+  v_ver int;
+begin
+  select value into v_ans from app_settings where key = 'gate_answer_hash';
+  if v_ans is null or p_answer is null or crypt(btrim(p_answer), v_ans) <> v_ans then
+    raise exception 'That answer is not correct';
+  end if;
+  if length(coalesce(p_new_password, '')) < 4 then
+    raise exception 'New password must be at least 4 characters';
+  end if;
+  update app_settings set value = crypt(p_new_password, gen_salt('bf'))
+   where key = 'gate_pass_hash';
+  update app_settings set value = ((value::int) + 1)::text where key = 'gate_version';
+  select value::int into v_ver from app_settings where key = 'gate_version';
+  return v_ver;
+end $$;
+
+-- ============================================================
+--  ADMIN: username change + gate password management
+-- ============================================================
+create or replace function admin_change_username(p_token text, p_new_username text) returns text
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id   int;
+  v_name text;
+begin
+  perform admin_verify(p_token);
+  v_name := btrim(coalesce(p_new_username, ''));
+  if v_name !~ '^[A-Za-z0-9_.]{3,40}$' then
+    raise exception 'Username must be 3-40 characters (letters, numbers, dot, underscore)';
+  end if;
+  select id into v_id from admins order by id limit 1;
+  begin
+    update admins set username = v_name where id = v_id;
+  exception when unique_violation then
+    raise exception 'That username is already taken';
+  end;
+  return v_name;
+end $$;
+
+create or replace function admin_set_gate_password(p_token text, p_new_password text) returns int
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_ver int;
+begin
+  perform admin_verify(p_token);
+  if length(coalesce(p_new_password, '')) < 4 then
+    raise exception 'Gate password must be at least 4 characters';
+  end if;
+  update app_settings set value = crypt(p_new_password, gen_salt('bf'))
+   where key = 'gate_pass_hash';
+  update app_settings set value = ((value::int) + 1)::text where key = 'gate_version';
+  select value::int into v_ver from app_settings where key = 'gate_version';
+  return v_ver;
+end $$;
+
+-- ============================================================
+--  BACKUPS / RESET (company data lifecycle)
+--  - reset always snapshots current data first
+--  - import always snapshots current data before restoring
+-- ============================================================
+create table if not exists backups (
+  id         bigint primary key generated always as identity,
+  label      text not null default 'Backup',
+  payload    jsonb not null,
+  created_at timestamptz not null default now()
+);
+alter table backups enable row level security;
+
+create or replace function backup_payload() returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object(
+    'items',      (select coalesce(jsonb_agg(to_jsonb(i)), '[]'::jsonb) from items i),
+    'orders',     (select coalesce(jsonb_agg(to_jsonb(o)), '[]'::jsonb) from orders o),
+    'orderItems', (select coalesce(jsonb_agg(to_jsonb(oi)), '[]'::jsonb) from order_items oi)
+  )
+$$;
+
+create or replace function admin_create_backup(p_token text, p_label text default null) returns bigint
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+begin
+  perform admin_verify(p_token);
+  insert into backups (label, payload)
+  values (coalesce(nullif(btrim(p_label, '')), 'Manual backup'), backup_payload())
+  returning id into v_id;
+  return v_id;
+end $$;
+
+create or replace function admin_list_backups(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_out jsonb;
+begin
+  perform admin_verify(p_token);
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'id', b.id,
+           'label', b.label,
+           'createdAt', b.created_at,
+           'items', jsonb_array_length(b.payload->'items'),
+           'orders', jsonb_array_length(b.payload->'orders')
+         ) order by b.id desc), '[]')
+    into v_out
+  from backups b;
+  return v_out;
+end $$;
+
+create or replace function wipe_live_data() returns void
+language sql security definer set search_path = public, extensions as $$
+  truncate table order_items, orders, items restart identity cascade;
+$$;
+
+create or replace function restore_payload(p_payload jsonb) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform wipe_live_data();
+
+  insert into items (id, name, emoji, category, price, stock, available, created_at, updated_at)
+  overriding system value
+  select (x->>'id')::bigint,
+         x->>'name',
+         coalesce(x->>'emoji', '🍽️'),
+         coalesce(x->>'category', 'Snacks'),
+         (x->>'price')::bigint,
+         (x->>'stock')::int,
+         coalesce((x->>'available')::boolean, true),
+         coalesce((x->>'created_at')::timestamptz, now()),
+         coalesce((x->>'updated_at')::timestamptz, now())
+  from jsonb_array_elements(coalesce(p_payload->'items', '[]'::jsonb)) x;
+
+  insert into orders (id, token_no, section, status, total, client_token, created_at, updated_at, created_day)
+  overriding system value
+  select (x->>'id')::bigint,
+         (x->>'token_no')::int,
+         x->>'section',
+         x->>'status',
+         (x->>'total')::bigint,
+         x->>'client_token',
+         coalesce((x->>'created_at')::timestamptz, now()),
+         coalesce((x->>'updated_at')::timestamptz, now()),
+         coalesce((x->>'created_day')::date, istoday())
+  from jsonb_array_elements(coalesce(p_payload->'orders', '[]'::jsonb)) x;
+
+  insert into order_items (id, order_id, item_id, name, emoji, price, qty, line_total)
+  overriding system value
+  select (x->>'id')::bigint,
+         (x->>'order_id')::bigint,
+         nullif(x->>'item_id','')::bigint,
+         x->>'name',
+         x->>'emoji',
+         (x->>'price')::bigint,
+         (x->>'qty')::int,
+         (x->>'line_total')::bigint
+  from jsonb_array_elements(coalesce(p_payload->'orderItems', '[]'::jsonb)) x;
+
+  -- keep generated-id sequences ahead of restored ids
+  perform setval(pg_get_serial_sequence('items', 'id'),
+                 coalesce((select max(id) from items), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('orders', 'id'),
+                 coalesce((select max(id) from orders), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('order_items', 'id'),
+                 coalesce((select max(id) from order_items), 0) + 1, false);
+end $$;
+
+create or replace function admin_restore_backup(p_token text, p_backup_id bigint) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_payload jsonb;
+  v_safety_id bigint;
+begin
+  perform admin_verify(p_token);
+
+  select payload into v_payload from backups where id = p_backup_id;
+  if not found then raise exception 'Backup not found'; end if;
+
+  -- safety net: snapshot CURRENT data before overwriting it
+  insert into backups (label, payload)
+  values ('Auto — before importing backup #' || p_backup_id, backup_payload())
+  returning id into v_safety_id;
+
+  perform restore_payload(v_payload);
+
+  return jsonb_build_object(
+    'restoredFrom', p_backup_id,
+    'safetyBackupId', v_safety_id,
+    'items', jsonb_array_length(coalesce(v_payload->'items', '[]'::jsonb)),
+    'orders', jsonb_array_length(coalesce(v_payload->'orders', '[]'::jsonb))
+  );
+end $$;
+
+create or replace function admin_reset_all(p_token text, p_label text default null) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_backup_id bigint;
+  v_counts jsonb;
+begin
+  perform admin_verify(p_token);
+
+  -- everything that exists right now is preserved on the server first
+  insert into backups (label, payload)
+  values (coalesce(nullif(btrim(p_label, '')), 'Fresh start'), backup_payload())
+  returning id into v_backup_id;
+
+  v_counts := backup_payload();
+  perform wipe_live_data();
+
+  return jsonb_build_object(
+    'backupId', v_backup_id,
+    'backedUpItems', jsonb_array_length(coalesce(v_counts->'items', '[]'::jsonb)),
+    'backedUpOrders', jsonb_array_length(coalesce(v_counts->'orders', '[]'::jsonb))
+  );
+end $$;

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { UiHost } from '@/lib/ui'
+import { GateLock } from '@/lib/gate'
 
 export const metadata: Metadata = {
   title: 'Syllabites · Campus Food Court',
@@ -19,7 +20,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body>
         <div className="phone" id="phone">
-          {children}
+          <GateLock>
+            {children}
+          </GateLock>
           <UiHost />
         </div>
       </body>
