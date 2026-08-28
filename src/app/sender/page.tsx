@@ -7,6 +7,7 @@ import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { MenuItem, Order } from '@/lib/fmt'
 import { toast, buzz, chime, confirmBox } from '@/lib/ui'
+import { startDeviceHeartbeat } from '@/lib/device'
 
 type Cart = Record<string, number>
 
@@ -66,9 +67,10 @@ export default function SenderPage() {
     setCart(JSON.parse(localStorage.getItem(`fc.cart.${section}`) || '{}'))
     tokensRef.current = loadTokens()
     Promise.all([loadMenu(), loadMine()]).then(() => setLoaded(true))
+    const hb = startDeviceHeartbeat(section, 'sender')
     // safety-net sync every 8s (covers missed live events)
     const p = setInterval(() => { loadMenu(); loadMine() }, 8000)
-    return () => clearInterval(p)
+    return () => { hb(); clearInterval(p) }
   }, [section, loadMenu, loadMine, loadTokens])
 
   /* clamp cart to reality whenever menu loads */

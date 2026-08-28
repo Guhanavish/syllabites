@@ -7,6 +7,7 @@ import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { Order } from '@/lib/fmt'
 import { toast, buzz, chime, confirmBox } from '@/lib/ui'
+import { startDeviceHeartbeat } from '@/lib/device'
 
 type Board = {
   active: Order[]
@@ -56,8 +57,9 @@ export default function ReceiverPage() {
   useEffect(() => {
     if (!section) return
     load()
+    const hb = startDeviceHeartbeat(section, 'receiver')
     const p = setInterval(() => load(), 5000) // fast safety net
-    return () => clearInterval(p)
+    return () => { hb(); clearInterval(p) }
   }, [section, load])
 
   /* ---------- realtime ---------- */

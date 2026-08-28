@@ -28,6 +28,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
   const maxSold = Math.max(1, ...s.topItems.map((t) => t.sold))
   const avg = s.orders > 0 ? Math.round(s.revenue / s.orders) : 0
   const rangeLbl = { today: 'today', week: '7 days', all: 'all time' }[s.range] || ''
+  const dev = s.devices || { boys: { sender: 0, receiver: 0, total: 0 }, girls: { sender: 0, receiver: 0, total: 0 }, total: 0 }
 
   return (
     <>
@@ -35,6 +36,30 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         {[['today', 'Today'], ['week', '7 days'], ['all', 'All time']].map(([v, l]) => (
           <button key={v} className={range === v ? 'on' : ''} onClick={() => setRange(v)}>{l}</button>
         ))}
+      </div>
+
+      {/* Active devices — separate for Boys / Girls */}
+      <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '.04em' }}>👦 BOYS</div>
+            <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{dev.boys.total}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 2 }}>
+              {dev.boys.sender} sender · {dev.boys.receiver} receiver
+            </div>
+          </div>
+          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '.04em' }}>👧 GIRLS</div>
+            <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{dev.girls.total}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 2 }}>
+              {dev.girls.sender} sender · {dev.girls.receiver} receiver
+            </div>
+          </div>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>
+          Total online now: {dev.total} device{dev.total === 1 ? '' : 's'}
+        </div>
       </div>
       <div className="kpi-grid">
         <div className="kpi wide">

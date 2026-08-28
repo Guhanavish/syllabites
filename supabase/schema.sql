@@ -417,7 +417,7 @@ language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_from  date;
   v_rev   bigint; v_cnt bigint; v_sold bigint; v_canc bigint;
-  v_sec   jsonb;  v_top jsonb; v_low jsonb;
+  v_sec   jsonb;  v_top jsonb; v_low jsonb; v_devices jsonb;
 begin
   perform admin_verify(p_token);
   if p_range = 'today' then v_from := istoday();
@@ -456,12 +456,15 @@ begin
     into v_low
   from items i where i.stock <= 5;
 
+  v_devices := device_counts();
+
   return jsonb_build_object(
     'range', coalesce(p_range,'all'),
     'revenue', v_rev, 'orders', v_cnt, 'totalSold', v_sold, 'cancelled', v_canc,
     'sections', v_sec,
     'topItems', v_top,
-    'lowStock', v_low
+    'lowStock', v_low,
+    'devices', v_devices
   );
 end $$;
 
@@ -747,3 +750,61 @@ begin
     'backedUpOrders', jsonb_array_length(coalesce(v_counts->'orders', '[]'::jsonb))
   );
 end $$;
+
+-- ============================================================
+--  DEVICE PRESENCE (multi-device, per-counter isolation)
+--  Every sender/receiver phone registers itself; admins see
+--  live counts separately for Boys and Girls.
+-- ============================================================
+create table if not exists device_presence (
+  device_id text not null,
+  section   text not null check (section in ('boys','girls')),
+  role      text not null check (role in ('sender','receiver')),
+  last_seen timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  primary key (device_id, section, role)
+);
+create index if not exists idx_device_presence_seen on device_presence (section, role, last_seen);
+alter table device_presence enable row level security;
+drop policy if exists "device_presence_all" on device_presence;
+create policy "device_presence_all" on device_presence
+  for all using (true) with check (true);
+
+create or replace function register_device(
+  p_device_id text, p_section text, p_role text
+) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  if p_device_id !~ '^[A-Za-z0-9_-]{8,64}$' then
+    raise exception 'Bad device id';
+  end if;
+  if p_section not in ('boys','girls') then
+    raise exception 'Invalid counter';
+  end if;
+  if p_role not in ('sender','receiver') then
+    raise exception 'Invalid role';
+  end if;
+  insert into device_presence (device_id, section, role, last_seen)
+  values (p_device_id, p_section, p_role, now())
+  on conflict (device_id, section, role)
+  do update set last_seen = excluded.last_seen;
+  -- opportunistic cleanup of stale entries (> 10 min)
+  delete from device_presence where last_seen < now() - interval '10 minutes';
+end $$;
+
+create or replace function device_counts() returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object(
+    'boys', jsonb_build_object(
+      'sender',   (select count(*) from device_presence where section='boys'  and role='sender'   and last_seen > now() - interval '2 minutes'),
+      'receiver', (select count(*) from device_presence where section='boys'  and role='receiver' and last_seen > now() - interval '2 minutes'),
+      'total',    (select count(*) from device_presence where section='boys'  and last_seen > now() - interval '2 minutes')
+    ),
+    'girls', jsonb_build_object(
+      'sender',   (select count(*) from device_presence where section='girls' and role='sender'   and last_seen > now() - interval '2 minutes'),
+      'receiver', (select count(*) from device_presence where section='girls' and role='receiver' and last_seen > now() - interval '2 minutes'),
+      'total',    (select count(*) from device_presence where section='girls' and last_seen > now() - interval '2 minutes')
+    ),
+    'total', (select count(*) from device_presence where last_seen > now() - interval '2 minutes')
+  )
+$$;
