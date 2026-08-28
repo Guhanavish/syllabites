@@ -38,27 +38,37 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         ))}
       </div>
 
-      {/* Active devices — separate for Boys / Girls */}
+      {/* Active devices — 4 fully individual counters */}
       <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min)</div>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min) — each counter separate</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '.04em' }}>👦 BOYS</div>
-            <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{dev.boys.total}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 2 }}>
-              {dev.boys.sender} sender · {dev.boys.receiver} receiver
-            </div>
+          <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #DBEAFE' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>👦 BOYS · SENDER</div>
+            <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#1E3A8A' }}>{dev.boys.sender}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6' }}>ordering phones</div>
           </div>
-          <div style={{ background: 'var(--bg)', borderRadius: 12, padding: '10px 12px', textAlign: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--muted)', letterSpacing: '.04em' }}>👧 GIRLS</div>
-            <div style={{ fontSize: 22, fontWeight: 900, marginTop: 4 }}>{dev.girls.total}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 2 }}>
-              {dev.girls.sender} sender · {dev.girls.receiver} receiver
-            </div>
+          <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #BFDBFE' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>👦 BOYS · RECEIVER</div>
+            <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#1E3A8A' }}>{dev.boys.receiver}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6' }}>counter screens</div>
+          </div>
+          <div style={{ background: '#FDF2F8', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #FBCFE8' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>👧 GIRLS · SENDER</div>
+            <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#831843' }}>{dev.girls.sender}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#EC4899' }}>ordering phones</div>
+          </div>
+          <div style={{ background: '#FDF2F8', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #F9A8D4' }}>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>👧 GIRLS · RECEIVER</div>
+            <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#831843' }}>{dev.girls.receiver}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#EC4899' }}>counter screens</div>
           </div>
         </div>
-        <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>
-          Total online now: {dev.total} device{dev.total === 1 ? '' : 's'}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10, fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
+          <span>👦 Boys total: {dev.boys.total}</span>
+          <span>·</span>
+          <span>👧 Girls total: {dev.girls.total}</span>
+          <span>·</span>
+          <span>All: {dev.total}</span>
         </div>
       </div>
       <div className="kpi-grid">
