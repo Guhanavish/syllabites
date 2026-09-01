@@ -22,6 +22,7 @@ export default function ReceiverPage() {
   const [board, setBoard] = useState<Board>({ active: [], doneToday: { count: 0, revenue: 0 }, doneOrders: [] })
   const [soundOn, setSoundOn] = useState(true)
   const [error, setError] = useState('')
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   const seenIds = useRef<Set<number>>(new Set())
   const firstLoad = useRef(true)
 
@@ -58,7 +59,7 @@ export default function ReceiverPage() {
     if (!section) return
     load()
     const hb = startDeviceHeartbeat(section, 'receiver')
-    const p = setInterval(() => load(), 5000) // fast safety net
+    const p = setInterval(() => load(), 10000) // fallback; realtime is primary
     return () => { hb(); clearInterval(p) }
   }, [section, load])
 
@@ -73,12 +74,30 @@ export default function ReceiverPage() {
   }, [section, load])
 
   async function serve(o: Order) {
+    if (pendingIds.has(o.id)) return
+    const code = ordNo(o)
+    // optimistic: remove card instantly and block double-taps
+    setBoard((prev) => ({ ...prev, active: prev.active.filter((x) => x.id !== o.id) }))
+    setPendingIds((prev) => new Set(prev).add(o.id))
     try {
-      await api('/api/orders/status', { method: 'POST', body: { id: o.id, status: 'completed' } })
+      const res: any = await api('/api/orders/status', { method: 'POST', body: { id: o.id, status: 'completed' } })
       buzz(15)
-      toast(`${ordNo(o)} served ✓`, 'ok')
+      if (res?.alreadyCompleted) {
+        toast(`Order ${code} was already served by another staff`, '')
+      } else {
+        toast(`${code} served ✓`, 'ok')
+      }
       load()
-    } catch (e: any) { toast(e.message, 'bad'); load() }
+    } catch (e: any) {
+      toast(e.message, 'bad')
+      load()
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(o.id)
+        return next
+      })
+    }
   }
 
   async function cancelOrder(o: Order) {
@@ -179,7 +198,9 @@ export default function ReceiverPage() {
                 </div>
                 {o.status === 'placed' && (
                   <div className="order-actions">
-                    <button className="btn ok" onClick={() => serve(o)}>✓ Served · handed over</button>
+                    <button className="btn ok" disabled={pendingIds.has(o.id)} onClick={() => serve(o)}>
+                      {pendingIds.has(o.id) ? 'Serving…' : '✓ Served · handed over'}
+                    </button>
                     <button className="btn sm soft-bad" style={{ flex: '0 0 auto', padding: '0 16px' }} onClick={() => cancelOrder(o)}>Cancel</button>
                   </div>
                 )}

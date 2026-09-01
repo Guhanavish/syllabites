@@ -237,10 +237,13 @@ begin
 
   select coalesce(jsonb_agg(order_full(o.id) order by o.id desc), '[]')
     into v_done
-  from orders o
-  where o.section = p_section and o.created_day = istoday()
-    and o.status in ('completed','cancelled')
-    and o.updated_at > now() - interval '12 hours';
+  from (
+    select id from orders
+    where section = p_section and created_day = istoday()
+      and status in ('completed','cancelled')
+    order by id desc limit 20
+  ) s
+  join orders o on o.id = s.id;
 
   return jsonb_build_object(
     'active', v_active,
@@ -253,12 +256,19 @@ create or replace function set_order_status(p_order_id bigint, p_status text) re
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_cur text;
+  v_result jsonb;
 begin
   if not (p_status = any(array['completed','cancelled'])) then
     raise exception 'Unknown status';
   end if;
-  select status into v_cur from orders where id = p_order_id;
+  select status into v_cur from orders where id = p_order_id for update;
   if not found then raise exception 'Order not found'; end if;
+
+  if v_cur = p_status then
+    v_result := order_full(p_order_id);
+    return jsonb_set(v_result, '{alreadyCompleted}', 'true'::jsonb);
+  end if;
+
   if v_cur <> 'placed' then
     raise exception 'This order is already %', v_cur;
   end if;

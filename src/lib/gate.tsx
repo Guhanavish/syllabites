@@ -114,6 +114,9 @@ export function GateLock({ children }: { children: ReactNode }) {
           </button>
         )}
       </div>
+      <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>
+        Built by Guhanavish , Inspired from Harish C
+      </div>
     </div>
   )
 }
