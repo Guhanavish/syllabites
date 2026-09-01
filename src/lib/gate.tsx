@@ -15,7 +15,7 @@ type Mode = { kind: 'enter' } | { kind: 'reset' }
 export function GateLock({ children }: { children: ReactNode }) {
   const [state, setState] = useState<'checking' | 'locked' | 'open'>('checking')
   const [mode, setMode] = useState<Mode>({ kind: 'enter' })
-  const [gateTab, setGateTab] = useState<'order' | 'staff'>('order')
+  const [gateTab, setGateTab] = useState<'welcome' | 'order' | 'staff'>('welcome')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -72,6 +72,34 @@ export function GateLock({ children }: { children: ReactNode }) {
   if (state === 'checking') return <div className="root" />
 
   const isReset = mode.kind === 'reset'
+  if (gateTab === 'welcome' && !isReset) {
+    return (
+      <div className="root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="scroll" style={{ paddingTop: 0 }}>
+          <div className="hero" style={{ margin: -16, marginBottom: 18, borderRadius: '0 0 28px 28px' }}>
+            <span className="float" style={{ top: 18, right: 22 }}>🥟</span>
+            <span className="float" style={{ bottom: 16, right: 64, animationDelay: '1.4s' }}>🥤</span>
+            <span className="float" style={{ top: 44, right: 120, animationDelay: '.7s' }}>🍚</span>
+            <span className="logo" style={{ fontSize: 48 }}>🍽️</span>
+            <h1 style={{ marginTop: 8 }}>Welcome</h1>
+            <p>The campus food court, reimagined — fresh orders, zero queue.</p>
+          </div>
+          <div style={{ padding: '6px 2px 0' }}>
+            <h2 style={{ fontSize: 18, fontWeight: 900, textAlign: 'center' }}>Welcome to Syllabites</h2>
+            <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, marginTop: 6 }}>
+              Choose how you&apos;d like to continue.
+            </p>
+            <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
+              <button className="btn btn-primary xl block" onClick={() => setGateTab('order')}>🍽️ Place Order</button>
+              <button className="btn btn-dark xl block" onClick={() => setGateTab('staff')}>🔒 Staff Environment</button>
+            </div>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="topbar" style={{ justifyContent: 'center', gap: 8 }}>
@@ -97,6 +125,9 @@ export function GateLock({ children }: { children: ReactNode }) {
         </div>
       ) : gateTab === 'order' ? (
         <div className="scroll" style={{ paddingTop: 14 }}>
+          <div style={{ textAlign: 'left', marginBottom: 8 }}>
+            <button className="admin-link" onClick={() => setGateTab('welcome')}>← Back to Welcome</button>
+          </div>
           <PublicOrder />
           <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
         </div>

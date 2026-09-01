@@ -7,7 +7,6 @@ import { toast, buzz, chime } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
 
 type Cart = Record<string, number>
-
 type Placed = { id: number; code: string; total: number; items: { name: string; emoji: string; qty: number; lineTotal: number }[] }
 
 export function PublicOrder() {
@@ -18,6 +17,10 @@ export function PublicOrder() {
   const [cart, setCart] = useState<Cart>({})
   const [sending, setSending] = useState(false)
   const [placed, setPlaced] = useState<Placed | null>(null)
+  const [name, setName] = useState('')
+  const [klass, setKlass] = useState('')
+  const [section, setSection] = useState('')
+  const [eventName, setEventName] = useState('')
 
   const loadMenu = useCallback(async () => {
     try {
@@ -29,28 +32,16 @@ export function PublicOrder() {
   }, [])
 
   useEffect(() => { loadMenu() }, [loadMenu])
-  // keep stock fresh without blocking UI (poll lightly, realtime is primary for admin but not needed here)
-  useEffect(() => {
-    const t = setInterval(loadMenu, 12000)
-    return () => clearInterval(t)
-  }, [loadMenu])
+  useEffect(() => { const t = setInterval(loadMenu, 12000); return () => clearInterval(t) }, [loadMenu])
 
   function addToCart(id: number, delta: number) {
     const it = items.find((x) => x.id === id)
     if (!it) return
     const cur = cart[String(id)] || 0
     const next = cur + delta
-    if (next > 10) {
-      toast('Contanct The volunteers for hight quantities', 'bad', 3400)
-      return
-    }
-    if (next <= 0) {
-      const n = { ...cart }; delete n[String(id)]; setCart(n); buzz(8); return
-    }
-    if (next > it.stock) {
-      toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad')
-      return
-    }
+    if (next > 10) { toast('Approach Volunteers For more orders', 'bad', 3400); return }
+    if (next <= 0) { const n = { ...cart }; delete n[String(id)]; setCart(n); buzz(8); return }
+    if (next > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     buzz(8)
     setCart({ ...cart, [String(id)]: next })
   }
@@ -63,13 +54,18 @@ export function PublicOrder() {
 
   async function place() {
     if (!totals.count || sending) return
-    // final client guard: any line >10 already blocked, but double-check
-    for (const qty of Object.values(cart)) if ((qty as number) > 10) { toast('Contanct The volunteers for hight quantities', 'bad'); return }
+    if (!name.trim() || !klass.trim() || !section.trim() || !eventName.trim()) {
+      toast('Please fill Name, Class, Section and Event', 'bad'); return
+    }
+    for (const qty of Object.values(cart)) if ((qty as number) > 10) { toast('Approach Volunteers For more orders', 'bad'); return }
     setSending(true)
     try {
       const res = await fetch('/api/public/place', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: Object.entries(cart).map(([itemId, qty]) => ({ itemId: Number(itemId), qty })) })
+        body: JSON.stringify({
+          items: Object.entries(cart).map(([itemId, qty]) => ({ itemId: Number(itemId), qty })),
+          name: name.trim(), klass: klass.trim(), section: section.trim(), eventName: eventName.trim()
+        })
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Could not place order')
@@ -77,22 +73,17 @@ export function PublicOrder() {
       setCart({})
       chime(); buzz([30, 60, 30])
     } catch (e: any) {
-      toast(e.message || 'Could not place order', 'bad', 3600)
-      loadMenu()
+      toast(e.message || 'Could not place order', 'bad', 3600); loadMenu()
     } finally { setSending(false) }
   }
 
-  // success view - code shown only here, never in list/history
   if (placed) {
     return (
       <div className="scroll" style={{ paddingBottom: 24 }}>
         <div style={{ textAlign: 'center', padding: '18px 0 10px' }}>
           <div className="check-circle" style={{ margin: '0 auto' }}><span>✓</span></div>
           <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order placed!</h2>
-          <p style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13, marginTop: 6 }}>
-            Show this code at the counter.
-            <br />Only you see it here.
-          </p>
+          <p style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13, marginTop: 6 }}>Show this code at the counter.<br />Only you see it here.</p>
         </div>
         <div className="card pad" style={{ textAlign: 'center', marginTop: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--muted)' }}>YOUR CODE</div>
@@ -100,15 +91,23 @@ export function PublicOrder() {
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{inr(placed.total)} · {placed.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
         </div>
         <button className="btn btn-primary xl block" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>Place another order</button>
-        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 10 }}>
-          Keep this code safe — it will not be shown again.
-        </p>
+        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 10 }}>Keep this code safe — it will not be shown again.</p>
       </div>
     )
   }
 
   return (
     <>
+      <div className="card pad" style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Your details</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div className="field" style={{ marginBottom: 0 }}><label>Name</label><input type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Class</label><input type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Section</label><input type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Event participating</label><input type="text" placeholder="e.g. Dance" value={eventName} onChange={e=>setEventName(e.target.value)} /></div>
+        </div>
+      </div>
+
       <div className="search-wrap"><span className="s-ico">🔎</span>
         <input type="text" placeholder="Search food…" value={q} onChange={e => setQ(e.target.value)} autoComplete="off" />
       </div>
@@ -136,7 +135,7 @@ export function PublicOrder() {
                 <div className="stepper">
                   <button onClick={() => addToCart(it.id, -1)}>{inCart <= 1 ? '🗑️' : '−'}</button>
                   <span className="qty-val">{inCart}</span>
-                  <button disabled={inCart >= 10 || inCart >= it.stock} onClick={() => addToCart(it.id, 1)}>+</button>
+                  <button onClick={() => addToCart(it.id, 1)}>+</button>
                 </div>
               ) : (
                 <button className="add-btn" disabled={it.stock === 0} onClick={() => addToCart(it.id, 1)}>ADD +</button>

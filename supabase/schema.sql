@@ -771,13 +771,17 @@ end $$;
 --  traffic with non-repeating codes.
 -- ============================================================
 create table if not exists public_orders (
-  id         bigint primary key generated always as identity,
-  code       char(6) not null unique,
-  total      bigint not null,
-  status     text not null default 'placed' check (status in ('placed','completed','cancelled')),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  created_day date not null default istoday()
+  id            bigint primary key generated always as identity,
+  code          char(6) not null unique,
+  total         bigint not null,
+  status        text not null default 'placed' check (status in ('placed','completed','cancelled')),
+  customer_name text not null default '',
+  customer_class text not null default '',
+  customer_section text not null default '',
+  event_name    text not null default '',
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now(),
+  created_day   date not null default istoday()
 );
 create index if not exists idx_public_orders_code on public_orders (code);
 create index if not exists idx_public_orders_day on public_orders (created_day, status);
@@ -799,6 +803,22 @@ alter table public_order_items enable row level security;
 drop policy if exists "public_orders_none" on public_orders;
 drop policy if exists "public_order_items_none" on public_order_items;
 -- No public read policies: only admin via security-definer functions can read
+
+-- ensure new columns exist for DBs created before this update (idempotent migration)
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='customer_name') then
+    alter table public_orders add column customer_name text not null default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='customer_class') then
+    alter table public_orders add column customer_class text not null default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='customer_section') then
+    alter table public_orders add column customer_section text not null default '';
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='event_name') then
+    alter table public_orders add column event_name text not null default '';
+  end if;
+end $$;
 
 do $$
 begin
@@ -831,22 +851,28 @@ create or replace function public_order_full(p_order_id bigint) returns jsonb
 language sql stable security definer set search_path = public, extensions as $$
   select to_jsonb(t) from (
     select o.id, o.code, o.total, o.status, o.created_at as "createdAt",
+      o.customer_name as "customerName", o.customer_class as "customerClass",
+      o.customer_section as "customerSection", o.event_name as "eventName",
       (select coalesce(jsonb_agg(jsonb_build_object('name', oi.name,'emoji',oi.emoji,'price',oi.price,'qty',oi.qty,'lineTotal',oi.line_total) order by oi.id),'[]')
        from public_order_items oi where oi.order_id=o.id) as items
     from public_orders o where o.id=p_order_id
   ) t
 $$;
 
-create or replace function public_place_order(p_items jsonb) returns jsonb
+create or replace function public_place_order(p_items jsonb, p_name text, p_class text, p_section text, p_event text) returns jsonb
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_item items%rowtype; v_el jsonb; v_id bigint; v_qty int; v_total bigint:=0; v_oid bigint; v_code char(6);
 begin
+  if btrim(coalesce(p_name,'')) = '' then raise exception 'Please enter your Name'; end if;
+  if btrim(coalesce(p_class,'')) = '' then raise exception 'Please enter your Class'; end if;
+  if btrim(coalesce(p_section,'')) = '' then raise exception 'Please enter your Section'; end if;
+  if btrim(coalesce(p_event,'')) = '' then raise exception 'Please enter Event participating'; end if;
   if p_items is null or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items)=0 or jsonb_array_length(p_items)>50 then
     raise exception 'Your cart is empty'; end if;
   for v_el in select * from jsonb_array_elements(p_items) loop
     v_id := (v_el->>'itemId')::bigint; v_qty := coalesce((v_el->>'qty')::int,0);
-    if v_qty < 1 or v_qty > 10 then raise exception 'Contanct The volunteers for hight quantities'; end if;
+    if v_qty < 1 or v_qty > 10 then raise exception 'Approach Volunteers For more orders'; end if;
     select * into v_item from items where id=v_id for update;
     if not found then raise exception 'Something in your cart was just removed'; end if;
     if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
@@ -857,7 +883,8 @@ begin
     v_total := v_total + v_item.price * v_qty;
   end loop;
   v_code := generate_public_code();
-  insert into public_orders (code, total) values (v_code, v_total) returning id into v_oid;
+  insert into public_orders (code, total, customer_name, customer_class, customer_section, event_name)
+  values (v_code, v_total, btrim(p_name), btrim(p_class), btrim(p_section), btrim(p_event)) returning id into v_oid;
   for v_el in select * from jsonb_array_elements(p_items) loop
     v_id := (v_el->>'itemId')::bigint; v_qty := (v_el->>'qty')::int;
     select * into v_item from items where id=v_id;
