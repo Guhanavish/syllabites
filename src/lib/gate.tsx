@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/lib/client'
 import { toast } from '@/lib/ui'
+import { PublicOrder } from '@/components/PublicOrder'
 
 type Mode = { kind: 'enter' } | { kind: 'reset' }
 
@@ -14,6 +15,7 @@ type Mode = { kind: 'enter' } | { kind: 'reset' }
 export function GateLock({ children }: { children: ReactNode }) {
   const [state, setState] = useState<'checking' | 'locked' | 'open'>('checking')
   const [mode, setMode] = useState<Mode>({ kind: 'enter' })
+  const [gateTab, setGateTab] = useState<'order' | 'staff'>('order')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
@@ -69,54 +71,51 @@ export function GateLock({ children }: { children: ReactNode }) {
   if (state === 'open') return <>{children}</>
   if (state === 'checking') return <div className="root" />
 
+  const isReset = mode.kind === 'reset'
   return (
-    <div className="login-wrap">
-      <div className="login-logo">🔒</div>
-      <h2 style={{ textAlign: 'center', fontSize: 21, fontWeight: 900 }}>Syllabites</h2>
-      <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, margin: '6px 0 22px' }}>
-        {mode.kind === 'enter'
-          ? 'Enter the access password to continue'
-          : 'Answer your security question to set a new password'}
-      </p>
+    <div className="root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="topbar" style={{ justifyContent: 'center', gap: 8 }}>
+        <button className={`chip ${gateTab === 'order' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('order'); setMode({ kind: 'enter' }); setErr('') }}>🍽️ Order Food</button>
+        <button className={`chip ${gateTab === 'staff' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('staff'); setMode({ kind: 'enter' }); setErr('') }}>🔒 Staff Access</button>
+      </div>
 
-      {mode.kind === 'enter' ? (
-        <form onSubmit={submitEnter} noValidate>
-          {err && <div className="form-error show">{err}</div>}
-          <div className="field">
-            <label>Access password</label>
-            <input name="pw" type="password" autoComplete="current-password" placeholder="••••••••" autoFocus />
+      {isReset ? (
+        <div className="login-wrap" style={{ flex: 1 }}>
+          <div className="login-logo">🔒</div>
+          <h2 style={{ textAlign: 'center', fontSize: 21, fontWeight: 900 }}>Syllabites</h2>
+          <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, margin: '6px 0 22px' }}>Answer your security question to set a new password</p>
+          <form onSubmit={submitReset} noValidate>
+            {err && <div className="form-error show">{err}</div>}
+            <div className="field"><label>Enter your gmail</label><input name="answer" type="text" autoCapitalize="none" placeholder="Your answer" autoFocus /></div>
+            <div className="field"><label>New password</label><input name="npw" type="password" autoComplete="new-password" placeholder="At least 4 characters" /></div>
+            <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Set new password</button>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: 18 }}>
+            <button className="admin-link" onClick={() => { setMode({ kind: 'enter' }); setErr('') }}>← Back</button>
           </div>
-          <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Unlock 🔓</button>
-        </form>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+        </div>
+      ) : gateTab === 'order' ? (
+        <div className="scroll" style={{ paddingTop: 14 }}>
+          <PublicOrder />
+          <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+        </div>
       ) : (
-        <form onSubmit={submitReset} noValidate>
-          {err && <div className="form-error show">{err}</div>}
-          <div className="field">
-            <label>Enter your gmail</label>
-            <input name="answer" type="text" autoCapitalize="none" placeholder="Your answer" autoFocus />
+        <div className="login-wrap" style={{ flex: 1 }}>
+          <div className="login-logo">🔒</div>
+          <h2 style={{ textAlign: 'center', fontSize: 21, fontWeight: 900 }}>Syllabites</h2>
+          <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, margin: '6px 0 22px' }}>Enter the access password to continue</p>
+          <form onSubmit={submitEnter} noValidate>
+            {err && <div className="form-error show">{err}</div>}
+            <div className="field"><label>Access password</label><input name="pw" type="password" autoComplete="current-password" placeholder="••••••••" autoFocus /></div>
+            <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Unlock 🔓</button>
+          </form>
+          <div style={{ textAlign: 'center', marginTop: 18 }}>
+            <button className="admin-link" onClick={() => { setMode({ kind: 'reset' }); setErr('') }}>Forgot password?</button>
           </div>
-          <div className="field">
-            <label>New password</label>
-            <input name="npw" type="password" autoComplete="new-password" placeholder="At least 4 characters" />
-          </div>
-          <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Set new password</button>
-        </form>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+        </div>
       )}
-
-      <div style={{ textAlign: 'center', marginTop: 18 }}>
-        {mode.kind === 'enter' ? (
-          <button className="admin-link" onClick={() => { setMode({ kind: 'reset' }); setErr('') }}>
-            Forgot password?
-          </button>
-        ) : (
-          <button className="admin-link" onClick={() => { setMode({ kind: 'enter' }); setErr('') }}>
-            ← Back
-          </button>
-        )}
-      </div>
-      <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>
-        Built by Guhanavish , Inspired from Harish C
-      </div>
     </div>
   )
 }

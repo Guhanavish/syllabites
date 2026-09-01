@@ -1,12 +1,17 @@
 /**
- * Food Court (Syllabites) Hardcore 10-Minute Stress & Resilience Tester
+ * Food Court (Syllabites) 30-Minute Endurance & Load Test Simulator
  * 
- * Tests the new Idempotent Counter Serving logic & Optimized Board Query under continuous load:
- *  - 👦 Boys Counter (Senders + Receivers)
- *  - 👧 Girls Counter (Senders + Receivers)
+ * Devices Configuration:
+ *  - 👦 Boys Counter (10 Devices):
+ *      • 5 x Order Senders
+ *      • 5 x Order Receivers
+ *  - 👧 Girls Counter (10 Devices):
+ *      • 5 x Order Senders
+ *      • 5 x Order Receivers
+ * Total: 20 Devices (10 Senders + 10 Receivers)
  * 
  * Usage:
- *   node test_traffic.mjs --duration 10m
+ *   node test_traffic.mjs --duration 30m
  */
 
 import { performance } from 'node:perf_hooks';
@@ -25,19 +30,19 @@ function getArg(keys, defaultVal) {
 
 function parseDuration(str) {
   const match = String(str).match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i);
-  if (!match) return 600000; // default 10m
+  if (!match) return 1800000; // default 30m
   const val = parseFloat(match[1]);
   const unit = (match[2] || 's').toLowerCase();
   if (unit === 'ms') return val;
   if (unit === 's') return val * 1000;
   if (unit === 'm') return val * 60 * 1000;
   if (unit === 'h') return val * 3600 * 1000;
-  return 600000;
+  return 1800000;
 }
 
 const TARGET_URL = (getArg(['--target', '-u', '--url'], 'https://syllabites.vercel.app')).replace(/\/+$/, '');
-const DURATION_MS = parseDuration(getArg(['--duration', '-d', '-t'], '10m'));
-const THINK_TIME_MS = Math.max(80, parseInt(getArg(['--pace', '-p'], '450'), 10));
+const DURATION_MS = parseDuration(getArg(['--duration', '-d', '-t'], '30m'));
+const THINK_TIME_MS = Math.max(80, parseInt(getArg(['--pace', '-p'], '500'), 10));
 
 // Concurrency setup: 20 Devices (10 Senders + 10 Receivers)
 const BOYS_SENDERS = Math.max(1, parseInt(getArg(['--senders-boys', '--sb'], '5'), 10));
@@ -103,7 +108,7 @@ async function timedFetch(url, options = {}, endpointKey = '') {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'User-Agent': 'FoodCourtHardcoreTester/1.0',
+        'User-Agent': 'FoodCourt30MinTester/1.0',
         ...(options.headers || {}),
       },
     });
@@ -199,7 +204,7 @@ async function runSenderDevice(section, deviceNum) {
     const availableItems = menuItems.filter(i => (i.stock || 1) > 10);
     const item = availableItems[Math.floor(Math.random() * availableItems.length)] || menuItems[0] || { id: 9 };
     const qty = 1;
-    const clientToken = `hc_${section}_s${deviceNum}_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
+    const clientToken = `end_${section}_s${deviceNum}_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
 
     const res = await timedFetch(
       `${TARGET_URL}/api/orders/place`,
@@ -237,7 +242,7 @@ async function runSenderDevice(section, deviceNum) {
   }
 }
 
-// Receiver Device Runner (High-Throughput Counter Staff)
+// Receiver Device Runner (Continuous Counter Processing)
 async function runReceiverDevice(section, deviceNum) {
   const secTag = section === 'boys' ? 'BOYS' : 'GIRLS';
   const prefix = section === 'boys' ? 'B' : 'G';
@@ -316,7 +321,7 @@ function calculatePercentiles(latencies) {
 
 function printHeader() {
   console.log(`\n${C.bold}----------------------------------------------------------------------${C.reset}`);
-  console.log(`  ${C.bold}${C.red}🔥  HARDCORE 10-MINUTE ENDURANCE TEST (Idempotent Counter Logic)${C.reset}`);
+  console.log(`  ${C.bold}${C.red}🔥  30-MINUTE FULL ENDURANCE LOAD TEST (Food Court App)${C.reset}`);
   console.log(`${C.bold}----------------------------------------------------------------------${C.reset}`);
   console.log(`  execution: ${C.green}local${C.reset}`);
   console.log(`  script:    ${C.cyan}test_traffic.mjs${C.reset}`);
@@ -340,7 +345,7 @@ function printSummary() {
   const completeP = calculatePercentiles(metrics.endpointStats.completeOrder.latencies);
 
   console.log(`\n${C.bold}======================================================================${C.reset}`);
-  console.log(`  ${C.bold}${C.green}📊 HARDCORE 10-MINUTE TEST SUMMARY & RESILIENCE REPORT${C.reset}`);
+  console.log(`  ${C.bold}${C.green}📊 30-MINUTE TEST SUMMARY & VERCEL RESILIENCE REPORT${C.reset}`);
   console.log(`${C.bold}======================================================================${C.reset}\n`);
 
   console.log(`  Target Deployment:     ${C.cyan}${TARGET_URL}${C.reset}`);
@@ -355,7 +360,7 @@ function printSummary() {
   console.log(`  ${C.bold}Order Totals & Handover Ratio:${C.reset}`);
   console.log(`    * Orders Placed:     ${C.cyan}${metrics.ordersPlaced.total}${C.reset} (👦 Boys: ${metrics.ordersPlaced.boys}, 👧 Girls: ${metrics.ordersPlaced.girls})`);
   console.log(`    * Orders Served:     ${C.green}${metrics.ordersCompleted.total}${C.reset} (👦 Boys: ${metrics.ordersCompleted.boys}, 👧 Girls: ${metrics.ordersCompleted.girls})`);
-  console.log(`    * Idempotent Saves:  ${C.yellow}${metrics.idempotentAlreadyServed}${C.reset} double-serve collisions resolved cleanly with HTTP 200\n`);
+  console.log(`    * Idempotent Saves:  ${C.yellow}${metrics.idempotentAlreadyServed}${C.reset} double-serve collisions resolved cleanly\n`);
 
   console.log(`  ${C.bold}HTTP Status Breakdown:${C.reset}`);
   for (const [code, count] of Object.entries(metrics.statusCodes)) {
@@ -369,14 +374,14 @@ function printSummary() {
   console.log(`    * GET  /board        avg=${boardP.avg.toFixed(1)}ms | p95=${boardP.p95.toFixed(1)}ms | errors=${metrics.endpointStats.getBoard.errors}`);
   console.log(`    * POST /orders/statusavg=${completeP.avg.toFixed(1)}ms | p95=${completeP.p95.toFixed(1)}ms | errors=${metrics.endpointStats.completeOrder.errors}`);
 
-  console.log(`\n  ${C.bold}Vercel & Supabase Hardcore Verdict:${C.reset}`);
+  console.log(`\n  ${C.bold}Vercel & Supabase 30-Minute Resilience Verdict:${C.reset}`);
   const failRate = (metrics.failures / (metrics.requests || 1)) * 100;
   if (failRate === 0 && overallP.p95 < 2000) {
-    console.log(`    ${C.green}✅ OUTSTANDING: 100% success rate with zero errors! The new idempotent logic and board optimization completely resolved counter collisions.${C.reset}`);
+    console.log(`    ${C.green}✅ OUTSTANDING: Sustained 30 minutes of continuous high-volume order flow with zero errors.${C.reset}`);
   } else if (failRate < 3) {
-    console.log(`    ${C.yellow}⚠️ EXCELLENT: ${(100 - failRate).toFixed(1)}% success rate under continuous hardcore load. Counter operations are highly resilient.${C.reset}`);
+    console.log(`    ${C.yellow}⚠️ EXCELLENT: ${(100 - failRate).toFixed(1)}% success rate across 30 minutes of heavy traffic.${C.reset}`);
   } else {
-    console.log(`    ${C.red}❌ UNSTABLE: ${failRate.toFixed(1)}% errors under hardcore load.${C.reset}`);
+    console.log(`    ${C.red}❌ UNSTABLE: ${failRate.toFixed(1)}% errors under 30-minute endurance load.${C.reset}`);
   }
   console.log(`\n${C.bold}----------------------------------------------------------------------${C.reset}\n`);
 }
@@ -393,16 +398,16 @@ async function main() {
   for (let i = 1; i <= GIRLS_SENDERS; i++) devices.push(runSenderDevice('girls', i));
   for (let i = 1; i <= GIRLS_RECEIVERS; i++) devices.push(runReceiverDevice('girls', i));
 
-  // Periodic heartbeat log every 30s + stock refresh
+  // Periodic heartbeat log every 60s
   const heartbeat = setInterval(() => {
     const elapsedSec = Math.floor((Date.now() - startTime) / 1000);
     const remSec = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
     const rps = (metrics.requests / elapsedSec).toFixed(1);
     console.log(
-      `\n${C.yellow}--- [HEARTBEAT ${getLogTimestamp()}] --- Elapsed: ${elapsedSec}s | Remaining: ${remSec}s | Req: ${metrics.requests} (${rps}/s) | Placed: ${metrics.ordersPlaced.total} | Served: ${metrics.ordersCompleted.total} | Idempotent Saves: ${metrics.idempotentAlreadyServed} | Errors: ${metrics.failures}${C.reset}\n`
+      `\n${C.yellow}--- [HEARTBEAT ${getLogTimestamp()}] --- Elapsed: ${elapsedSec}s | Remaining: ${remSec}s | Req: ${metrics.requests} (${rps}/s) | Placed: ${metrics.ordersPlaced.total} | Served: ${metrics.ordersCompleted.total} | Errors: ${metrics.failures}${C.reset}\n`
     );
     refreshMenu();
-  }, 30000);
+  }, 60000);
 
   process.on('SIGINT', () => {
     console.log(`\n${C.yellow}Test interrupted by user! Generating report...${C.reset}`);

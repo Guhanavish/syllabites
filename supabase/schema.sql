@@ -50,6 +50,7 @@ create table if not exists orders (
   unique (token_no, section, created_day)
 );
 create index if not exists idx_orders_board on orders (section, status, created_day);
+create index if not exists idx_orders_board_lookup on orders (section, status, created_day);
 
 create table if not exists order_items (
   id         bigint primary key generated always as identity,
@@ -155,7 +156,9 @@ begin
   for v_el in select * from jsonb_array_elements(p_items) loop
     v_id  := (v_el->>'itemId')::bigint;
     v_qty := coalesce((v_el->>'qty')::int, 0);
-    if v_qty < 1 or v_qty > 50 then raise exception 'Invalid quantity'; end if;
+    if v_qty < 1 or v_qty > 10 then
+      raise exception 'Contanct The volunteers for hight quantities';
+    end if;
     select * into v_item from items where id = v_id for update;
     if not found then raise exception 'Something in your cart was just removed'; end if;
     if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
@@ -759,6 +762,143 @@ begin
     'backedUpItems', jsonb_array_length(coalesce(v_counts->'items', '[]'::jsonb)),
     'backedUpOrders', jsonb_array_length(coalesce(v_counts->'orders', '[]'::jsonb))
   );
+end $$;
+
+-- ============================================================
+--  PUBLIC PRE-GATE ORDERS (6-digit code, admin-only visibility)
+--  Orders placed BEFORE the access password. Code shown only to
+--  the orderer, visible only to admins. Handles heavy concurrent
+--  traffic with non-repeating codes.
+-- ============================================================
+create table if not exists public_orders (
+  id         bigint primary key generated always as identity,
+  code       char(6) not null unique,
+  total      bigint not null,
+  status     text not null default 'placed' check (status in ('placed','completed','cancelled')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  created_day date not null default istoday()
+);
+create index if not exists idx_public_orders_code on public_orders (code);
+create index if not exists idx_public_orders_day on public_orders (created_day, status);
+
+create table if not exists public_order_items (
+  id         bigint primary key generated always as identity,
+  order_id   bigint not null references public_orders(id) on delete cascade,
+  item_id    bigint,
+  name       text not null,
+  emoji      text,
+  price      bigint not null,
+  qty        int not null check (qty > 0 and qty <= 10),
+  line_total bigint not null
+);
+create index if not exists idx_public_order_items_order on public_order_items (order_id);
+
+alter table public_orders enable row level security;
+alter table public_order_items enable row level security;
+drop policy if exists "public_orders_none" on public_orders;
+drop policy if exists "public_order_items_none" on public_order_items;
+-- No public read policies: only admin via security-definer functions can read
+
+do $$
+begin
+  begin alter publication supabase_realtime add table public_orders;
+  exception when duplicate_object then null; when undefined_object then null; end;
+end $$;
+
+create or replace function generate_public_code() returns char(6)
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_code char(6);
+  v_tries int := 0;
+begin
+  perform pg_advisory_xact_lock(hashtext('public_code'));
+  loop
+    v_code := lpad((floor(random()*900000) + 100000)::int::text, 6, '0');
+    perform 1 from public_orders where code = v_code;
+    if not found then return v_code; end if;
+    v_tries := v_tries + 1;
+    if v_tries > 20 then
+      v_code := lpad((extract(epoch from clock_timestamp())::bigint % 900000 + 100000)::text,6,'0');
+      perform 1 from public_orders where code = v_code;
+      if not found then return v_code; end if;
+    end if;
+    if v_tries > 40 then raise exception 'Could not generate unique code, please try again'; end if;
+  end loop;
+end $$;
+
+create or replace function public_order_full(p_order_id bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select to_jsonb(t) from (
+    select o.id, o.code, o.total, o.status, o.created_at as "createdAt",
+      (select coalesce(jsonb_agg(jsonb_build_object('name', oi.name,'emoji',oi.emoji,'price',oi.price,'qty',oi.qty,'lineTotal',oi.line_total) order by oi.id),'[]')
+       from public_order_items oi where oi.order_id=o.id) as items
+    from public_orders o where o.id=p_order_id
+  ) t
+$$;
+
+create or replace function public_place_order(p_items jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_item items%rowtype; v_el jsonb; v_id bigint; v_qty int; v_total bigint:=0; v_oid bigint; v_code char(6);
+begin
+  if p_items is null or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items)=0 or jsonb_array_length(p_items)>50 then
+    raise exception 'Your cart is empty'; end if;
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id := (v_el->>'itemId')::bigint; v_qty := coalesce((v_el->>'qty')::int,0);
+    if v_qty < 1 or v_qty > 10 then raise exception 'Contanct The volunteers for hight quantities'; end if;
+    select * into v_item from items where id=v_id for update;
+    if not found then raise exception 'Something in your cart was just removed'; end if;
+    if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
+    if v_item.stock < v_qty then
+      if v_item.stock=0 then raise exception '"%" just went out of stock', v_item.name;
+      else raise exception 'Only % left of "%" ', v_item.stock, v_item.name; end if;
+    end if;
+    v_total := v_total + v_item.price * v_qty;
+  end loop;
+  v_code := generate_public_code();
+  insert into public_orders (code, total) values (v_code, v_total) returning id into v_oid;
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id := (v_el->>'itemId')::bigint; v_qty := (v_el->>'qty')::int;
+    select * into v_item from items where id=v_id;
+    insert into public_order_items (order_id, item_id, name, emoji, price, qty, line_total)
+    values (v_oid, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price*v_qty);
+    update items set stock = stock - v_qty, updated_at=now() where id=v_id;
+  end loop;
+  return public_order_full(v_oid);
+exception when unique_violation then
+  -- extremely rare code collision under concurrent traffic: retry once with fresh code
+  v_code := generate_public_code();
+  insert into public_orders (code, total) values (v_code, v_total) returning id into v_oid;
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id := (v_el->>'itemId')::bigint; v_qty := (v_el->>'qty')::int;
+    select * into v_item from items where id=v_id;
+    insert into public_order_items (order_id, item_id, name, emoji, price, qty, line_total)
+    values (v_oid, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price*v_qty);
+  end loop;
+  return public_order_full(v_oid);
+end $$;
+
+create or replace function admin_list_public_orders(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_out jsonb; begin
+  perform admin_verify(p_token);
+  select coalesce(jsonb_agg(public_order_full(o.id) order by o.id desc),'[]') into v_out
+  from (select id from public_orders order by id desc limit 200) o;
+  return v_out;
+end $$;
+
+create or replace function admin_update_public_order_status(p_token text, p_order_id bigint, p_status text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform admin_verify(p_token);
+  if p_status not in ('completed','cancelled') then raise exception 'Unknown status'; end if;
+  update public_orders set status=p_status, updated_at=now() where id=p_order_id;
+  if not found then raise exception 'Order not found'; end if;
+  if p_status='cancelled' then
+    update items i set stock=i.stock+oi.qty, updated_at=now() from public_order_items oi where oi.order_id=p_order_id and oi.item_id=i.id;
+  end if;
+  return public_order_full(p_order_id);
 end $$;
 
 -- ============================================================

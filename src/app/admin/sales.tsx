@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/client'
-import { inr } from '@/lib/fmt'
+import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
+import { toast } from '@/lib/ui'
 import type { Stats } from './types'
 
 export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
@@ -29,6 +30,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
   const avg = s.orders > 0 ? Math.round(s.revenue / s.orders) : 0
   const rangeLbl = { today: 'today', week: '7 days', all: 'all time' }[s.range] || ''
   const dev = s.devices || { boys: { sender: 0, receiver: 0, total: 0 }, girls: { sender: 0, receiver: 0, total: 0 }, total: 0 }
+  const pubCount = (s as any).publicOrders ?? 0
 
   return (
     <>
@@ -37,6 +39,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
           <button key={v} className={range === v ? 'on' : ''} onClick={() => setRange(v)}>{l}</button>
         ))}
       </div>
+      <PublicOrdersCard />
 
       {/* Active devices — 4 fully individual counters */}
       <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
@@ -140,5 +143,64 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         </>
       )}
     </>
+  )
+}
+
+function PublicOrdersCard() {
+  const [orders, setOrders] = useState<any[]>([])
+  const [err, setErr] = useState('')
+  const load = useCallback(async () => {
+    try {
+      const data = await api<any[]>('/api/public/admin-list')
+      setOrders(Array.isArray(data) ? data : [])
+    } catch (e: any) { setErr(e.message || 'Could not load') }
+  }, [])
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t) }, [load])
+
+  async function updateStatus(o: any, status: string) {
+    try {
+      await api('/api/public/admin-status', { method: 'POST', body: { id: o.id, status } })
+      load()
+    } catch (e: any) { toast(e.message, 'bad') }
+  }
+
+  return (
+    <div className="card pad" style={{ marginTop: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 13, fontWeight: 900 }}>🎟️ Public orders (code-only, admin view)</div>
+        <button className="btn sm ghost" onClick={load}>↻ Refresh</button>
+      </div>
+      {err ? <div className="form-error show" style={{ marginTop: 8 }}>{err}</div> : null}
+      {!orders.length ? (
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>No public orders yet. They appear here with their 6-digit code — staff and other users cannot see them.</p>
+      ) : (
+        <div style={{ marginTop: 10 }}>
+          {orders.map((o) => (
+            <div key={o.id} className="order-card enter" style={{ marginBottom: 10, padding: 12 }}>
+              <div className="order-head">
+                <div className="token-chip"><span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span></div>
+                <div className="order-title">
+                  <span className={`badge-pill ${statusCls(o.status)}`}>{statusPill(o.status)}</span>
+                  <div className="order-time" style={{ marginTop: 3 }}>{timeAgo(o.createdAt)} · {clockTime(o.createdAt)} · {inr(o.total)}</div>
+                </div>
+              </div>
+              <div className="order-items" style={{ marginTop: 10 }}>
+                {o.items?.map((li: any, ix: number) => (
+                  <div key={ix} className="oi-line">
+                    <span className="oi-qty">{li.qty}×</span><span>{li.emoji || ''} {li.name}</span><span className="oi-dots" /><span className="oi-amt">{inr(li.lineTotal)}</span>
+                  </div>
+                ))}
+              </div>
+              {o.status === 'placed' && (
+                <div className="order-actions" style={{ marginTop: 10 }}>
+                  <button className="btn ok" onClick={() => updateStatus(o, 'completed')}>✓ Served</button>
+                  <button className="btn sm soft-bad" style={{ flex: '0 0 auto' }} onClick={() => updateStatus(o, 'cancelled')}>Cancel</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
