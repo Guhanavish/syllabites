@@ -896,7 +896,8 @@ begin
 exception when unique_violation then
   -- extremely rare code collision under concurrent traffic: retry once with fresh code
   v_code := generate_public_code();
-  insert into public_orders (code, total) values (v_code, v_total) returning id into v_oid;
+  insert into public_orders (code, total, customer_name, customer_class, customer_section, event_name)
+  values (v_code, v_total, btrim(p_name), btrim(p_class), btrim(p_section), btrim(p_event)) returning id into v_oid;
   for v_el in select * from jsonb_array_elements(p_items) loop
     v_id := (v_el->>'itemId')::bigint; v_qty := (v_el->>'qty')::int;
     select * into v_item from items where id=v_id;
