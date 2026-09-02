@@ -104,7 +104,7 @@ export function GateLock({ children }: { children: ReactNode }) {
               <button className="btn btn-dark xl block" onClick={() => setGateTab('staff')}>🔒 Staff Environment</button>
             </div>
           </div>
-          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
         </div>
       </div>
     )
@@ -131,7 +131,7 @@ export function GateLock({ children }: { children: ReactNode }) {
           <div style={{ textAlign: 'center', marginTop: 18 }}>
             <button className="admin-link" onClick={() => { setMode({ kind: 'enter' }); setErr('') }}>← Back</button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
         </div>
       ) : gateTab === 'order' ? (
         <div className="scroll" style={{ paddingTop: 14 }}>
@@ -139,7 +139,7 @@ export function GateLock({ children }: { children: ReactNode }) {
             <button className="admin-link" onClick={() => setGateTab('welcome')}>← Back to Welcome</button>
           </div>
           <PublicOrder />
-          <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+          <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
         </div>
       ) : (
         <div className="login-wrap" style={{ flex: 1 }}>
@@ -154,7 +154,7 @@ export function GateLock({ children }: { children: ReactNode }) {
           <div style={{ textAlign: 'center', marginTop: 18 }}>
             <button className="admin-link" onClick={() => { setMode({ kind: 'reset' }); setErr('') }}>Forgot password?</button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish , Inspired from Harish C</div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
         </div>
       )}
     </div>
