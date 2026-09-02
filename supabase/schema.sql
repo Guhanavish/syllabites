@@ -967,7 +967,7 @@ begin
   select value::int into v_remaining from app_settings where key='public_offer_remaining';
   if v_active='1' and coalesce(v_remaining,0) > 0 then
     v_roll := random();
-    if v_roll < 0.02 then
+    if v_roll < 0.04 then
       v_pct := floor(random()*6 + 5)::int;
       v_discount := round(v_total * v_pct / 100.0)::bigint;
       v_total := v_total - v_discount;

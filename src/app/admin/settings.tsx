@@ -201,10 +201,10 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       <div className="card pad" style={{ marginBottom: 14 }}>
         <b style={{ fontSize: 15 }}>🎁 Public order discount offer</b>
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
-          5-10% off on 2 random orders out of 100 (2% chance). Only for entrance (public) orders. Click Start to activate.
+          5-10% off on 2 random orders out of 50 (4% chance). Only for entrance (public) orders. Click Start to activate.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (2/100)</button>
+          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (2/50)</button>
           <button className="btn btn-ghost" onClick={loadOffer}>↻ Status</button>
         </div>
         {offer && (
