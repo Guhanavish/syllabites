@@ -81,7 +81,7 @@ export default function SenderPage() {
     for (const id of Object.keys(next)) {
       const it = items.find((x) => String(x.id) === id)
       if (!it || !it.available || it.stock === 0) { delete next[id]; changed = true }
-      else if (next[id] > it.stock || next[id] > 10) { next[id] = Math.min(it.stock, 10); changed = true }
+      else if (next[id] > it.stock || next[id] > 30) { next[id] = Math.min(it.stock, 30); changed = true }
     }
     if (changed) { setCart(next); localStorage.setItem(`fc.cart.${section}`, JSON.stringify(next)) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -98,13 +98,13 @@ export default function SenderPage() {
     return () => { sb().removeChannel(ch) }
   }, [section, loadMenu, loadMine])
 
-  /* ---------- cart ops ---------- */
+  /* ---------- cart ops — max 30 per item for Boys/Girls counters ---------- */
   function addToCart(id: number, delta: number) {
     const it = items.find((x) => x.id === id)
     if (!it || !it.available || !section) return
     const cur = cart[String(id)] || 0
     const nxt = cur + delta
-    if (nxt > 10) { toast('Contanct The volunteers for hight quantities', 'bad', 3400); return }
+    if (nxt > 30) { toast('Contanct The volunteers for hight quantities', 'bad', 3400); return }
     if (nxt > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     const next = { ...cart }
     let v = Math.max(0, nxt)
@@ -231,7 +231,7 @@ export default function SenderPage() {
                     <div className="stepper">
                       <button onClick={() => addToCart(it.id, -1)}>{inCart <= 1 ? '🗑️' : '−'}</button>
                       <span className="qty-val">{inCart}</span>
-                      <button disabled={inCart >= 10 || inCart >= it.stock} onClick={() => addToCart(it.id, +1)}>+</button>
+                      <button disabled={inCart >= 30 || inCart >= it.stock} onClick={() => addToCart(it.id, +1)}>+</button>
                     </div>
                   ) : (
                     <button className="add-btn" disabled={it.stock === 0} onClick={() => addToCart(it.id, +1)}>ADD +</button>

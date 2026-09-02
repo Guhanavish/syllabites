@@ -46,18 +46,23 @@ export default function AdminPage() {
         <button className="icon-btn" onClick={logout} aria-label="Logout">🚪</button>
       </header>
 
-      <div className="scroll flush-bottom">
-        <div style={{ display: tab === 'sales' ? '' : 'none' }}><SalesTab expired={handleExpired} /></div>
-        <div style={{ display: tab === 'menu' ? '' : 'none' }}><MenuTab expired={handleExpired} /></div>
-        <div style={{ display: tab === 'orders' ? '' : 'none' }}><OrdersTab expired={handleExpired} /></div>
-        <div style={{ display: tab === 'settings' ? '' : 'none' }}>
-          <SettingsTab expired={handleExpired} onLogout={logout} />
-        </div>
+      <div className="scroll flush-bottom" style={{ contain: 'content' }}>
+        {tab === 'sales' && <SalesTab expired={handleExpired} />}
+        {tab === 'menu' && <MenuTab expired={handleExpired} />}
+        {tab === 'orders' && <OrdersTab expired={handleExpired} />}
+        {tab === 'settings' && <SettingsTab expired={handleExpired} onLogout={logout} />}
       </div>
 
       <nav className="bottomnav">
         {([['sales', '📊', 'Sales'], ['menu', '📝', 'Menu'], ['orders', '🧾', 'Orders'], ['settings', '⚙️', 'Settings']] as const).map(([t, i, l]) => (
-          <button key={t} className={`nav-tab${tab === t ? ' on' : ''}`} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            className={`nav-tab${tab === t ? ' on' : ''}`}
+            onClick={() => {
+              // instant tab switch with transition, no layout thrash
+              if (t !== tab) setTab(t as any)
+            }}
+          >
             <span className="ico">{i}</span>{l}
           </button>
         ))}
