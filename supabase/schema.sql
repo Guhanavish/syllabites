@@ -157,7 +157,7 @@ begin
     v_id  := (v_el->>'itemId')::bigint;
     v_qty := coalesce((v_el->>'qty')::int, 0);
     if v_qty < 1 or v_qty > 30 then
-      raise exception 'Contanct The volunteers for hight quantities';
+      raise exception 'Contanct The volunteers for high quantities';
     end if;
     select * into v_item from items where id = v_id for update;
     if not found then raise exception 'Something in your cart was just removed'; end if;

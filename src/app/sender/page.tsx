@@ -104,7 +104,7 @@ export default function SenderPage() {
     if (!it || !it.available || !section) return
     const cur = cart[String(id)] || 0
     const nxt = cur + delta
-    if (nxt > 30) { toast('Contanct The volunteers for hight quantities', 'bad', 3400); return }
+    if (nxt > 30) { toast('Contanct The volunteers for high quantities', 'bad', 3400); return }
     if (nxt > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     const next = { ...cart }
     let v = Math.max(0, nxt)

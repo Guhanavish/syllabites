@@ -39,7 +39,6 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
           <button key={v} className={range === v ? 'on' : ''} onClick={() => setRange(v)}>{l}</button>
         ))}
       </div>
-      <PublicOrdersCard />
 
       {/* Active devices — 4 fully individual counters */}
       <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
@@ -142,6 +141,9 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
           </div>
         </>
       )}
+
+      <div className="divider-label">🎟️ Public orders</div>
+      <PublicOrdersCard />
     </>
   )
 }
