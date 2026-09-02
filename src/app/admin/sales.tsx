@@ -166,22 +166,29 @@ function PublicOrdersCard() {
 
   return (
     <div className="card pad" style={{ marginTop: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 900 }}>🎟️ Public orders (code-only, admin view)</div>
-        <button className="btn sm ghost" onClick={load}>↻ Refresh</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn sm ghost" onClick={load}>↻ Refresh</button>
+          <a href="/admin/public-orders" className="btn sm ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View →</a>
+        </div>
       </div>
       {err ? <div className="form-error show" style={{ marginTop: 8 }}>{err}</div> : null}
       {!orders.length ? (
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>No public orders yet. They appear here with their 6-digit code — staff and other users cannot see them.</p>
       ) : (
         <div style={{ marginTop: 10 }}>
-          {orders.map((o) => (
+          {orders.slice(0, 3).map((o) => (
             <div key={o.id} className="order-card enter" style={{ marginBottom: 10, padding: 12 }}>
               <div className="order-head">
                 <div className="token-chip"><span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span></div>
                 <div className="order-title">
                   <span className={`badge-pill ${statusCls(o.status)}`}>{statusPill(o.status)}</span>
                   <div className="order-time" style={{ marginTop: 3 }}>{timeAgo(o.createdAt)} · {clockTime(o.createdAt)} · {inr(o.total)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--muted)', marginTop: 2 }}>
+                    {o.customerName ? `${o.customerName} · ${o.customerClass} · ${o.customerSection} · ${o.eventName}` : ''}
+                    {o.isDiscounted ? <span style={{ color: 'var(--ok)', marginLeft: 6 }}>· {o.discountPercent}% off (saved {inr(o.discountAmount)})</span> : ''}
+                  </div>
                 </div>
               </div>
               <div className="order-items" style={{ marginTop: 10 }}>
@@ -199,6 +206,11 @@ function PublicOrdersCard() {
               )}
             </div>
           ))}
+          {orders.length > 3 && (
+            <div style={{ textAlign: 'center', marginTop: 8 }}>
+              <a href="/admin/public-orders" className="btn sm ghost">View all {orders.length} orders →</a>
+            </div>
+          )}
         </div>
       )}
     </div>

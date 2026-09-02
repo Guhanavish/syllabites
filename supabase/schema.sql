@@ -515,7 +515,11 @@ insert into app_settings (key, value) values
   ('gate_pass_hash',    crypt('syllabites123', gen_salt('bf'))),
   ('gate_question',     'Enter your gmail'),
   ('gate_answer_hash',  crypt('ssgginfotech', gen_salt('bf'))),
-  ('gate_version',      '1')
+  ('gate_version',      '1'),
+  ('boys_pass_hash',    crypt('boyzz', gen_salt('bf'))),
+  ('girls_pass_hash',   crypt('girls', gen_salt('bf'))),
+  ('public_offer_active', '0'),
+  ('public_offer_remaining', '0')
 on conflict (key) do nothing;
 
 alter table app_settings enable row level security;
@@ -557,6 +561,34 @@ begin
   return v_ver;
 end $$;
 
+-- ---------- section passwords (Boys / Girls) ----------
+create or replace function verify_section_password(p_section text, p_password text) returns boolean
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_hash text; v_key text;
+begin
+  if p_section not in ('boys','girls') then raise exception 'Invalid section'; end if;
+  v_key := p_section || '_pass_hash';
+  select value into v_hash from app_settings where key = v_key;
+  if v_hash is null or crypt(p_password, v_hash) <> v_hash then
+    raise exception 'Wrong password for %', initcap(p_section);
+  end if;
+  return true;
+end $$;
+
+create or replace function admin_set_section_password(p_token text, p_section text, p_new_password text) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_key text;
+begin
+  perform admin_verify(p_token);
+  if p_section not in ('boys','girls') then raise exception 'Invalid section'; end if;
+  if length(coalesce(p_new_password,'')) < 3 then raise exception 'Password must be at least 3 characters'; end if;
+  v_key := p_section || '_pass_hash';
+  update app_settings set value = crypt(p_new_password, gen_salt('bf')) where key = v_key;
+  if not found then
+    insert into app_settings (key, value) values (v_key, crypt(p_new_password, gen_salt('bf')));
+  end if;
+end $$;
+
 -- ============================================================
 --  ADMIN: username change + gate password management
 -- ============================================================
@@ -595,6 +627,33 @@ begin
   select value::int into v_ver from app_settings where key = 'gate_version';
   return v_ver;
 end $$;
+
+create or replace function admin_start_public_offer(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform admin_verify(p_token);
+  update app_settings set value='1' where key='public_offer_active';
+  update app_settings set value='2' where key='public_offer_remaining';
+  -- clear previous discounted order flags for fresh run? keep history but reset active
+  return jsonb_build_object('active', true, 'remaining', 2);
+end $$;
+
+create or replace function admin_offer_status(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_active text; v_remaining int; v_logs jsonb;
+begin
+  perform admin_verify(p_token);
+  select value into v_active from app_settings where key='public_offer_active';
+  select value::int into v_remaining from app_settings where key='public_offer_remaining';
+  select coalesce(jsonb_agg(jsonb_build_object('code', code, 'customerName', customer_name, 'customerClass', customer_class, 'customerSection', customer_section, 'eventName', event_name, 'originalTotal', original_total, 'discountPercent', discount_percent, 'discountAmount', discount_amount, 'total', total, 'createdAt', created_at) order by id desc), '[]')
+  into v_logs from public_orders where is_discounted = true;
+  return jsonb_build_object('active', v_active='1', 'remaining', coalesce(v_remaining,0), 'discountedOrders', coalesce(v_logs, '[]'::jsonb));
+end $$;
+
+create or replace function public_offer_public_status() returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object('active', coalesce((select value='1' from app_settings where key='public_offer_active'), false))
+$$;
 
 -- ============================================================
 --  BACKUPS / RESET (company data lifecycle)
@@ -786,6 +845,22 @@ create table if not exists public_orders (
 create index if not exists idx_public_orders_code on public_orders (code);
 create index if not exists idx_public_orders_day on public_orders (created_day, status);
 
+-- add discount columns if DB was created before this update
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='discount_percent') then
+    alter table public_orders add column discount_percent int;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='discount_amount') then
+    alter table public_orders add column discount_amount bigint;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='original_total') then
+    alter table public_orders add column original_total bigint;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='is_discounted') then
+    alter table public_orders add column is_discounted boolean not null default false;
+  end if;
+end $$;
+
 create table if not exists public_order_items (
   id         bigint primary key generated always as identity,
   order_id   bigint not null references public_orders(id) on delete cascade,
@@ -853,6 +928,8 @@ language sql stable security definer set search_path = public, extensions as $$
     select o.id, o.code, o.total, o.status, o.created_at as "createdAt",
       o.customer_name as "customerName", o.customer_class as "customerClass",
       o.customer_section as "customerSection", o.event_name as "eventName",
+      o.discount_percent as "discountPercent", o.discount_amount as "discountAmount",
+      o.original_total as "originalTotal", o.is_discounted as "isDiscounted",
       (select coalesce(jsonb_agg(jsonb_build_object('name', oi.name,'emoji',oi.emoji,'price',oi.price,'qty',oi.qty,'lineTotal',oi.line_total) order by oi.id),'[]')
        from public_order_items oi where oi.order_id=o.id) as items
     from public_orders o where o.id=p_order_id
@@ -863,6 +940,7 @@ create or replace function public_place_order(p_items jsonb, p_name text, p_clas
 language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_item items%rowtype; v_el jsonb; v_id bigint; v_qty int; v_total bigint:=0; v_oid bigint; v_code char(6);
+  v_active text; v_remaining int; v_roll double precision; v_pct int; v_discount bigint; v_original bigint;
 begin
   if btrim(coalesce(p_name,'')) = '' then raise exception 'Please enter your Name'; end if;
   if btrim(coalesce(p_class,'')) = '' then raise exception 'Please enter your Class'; end if;
@@ -883,6 +961,34 @@ begin
     v_total := v_total + v_item.price * v_qty;
   end loop;
   v_code := generate_public_code();
+  -- discount logic: only for public orders, 2% chance, max 2 times, 5-10% off
+  v_original := v_total;
+  select value into v_active from app_settings where key='public_offer_active';
+  select value::int into v_remaining from app_settings where key='public_offer_remaining';
+  if v_active='1' and coalesce(v_remaining,0) > 0 then
+    v_roll := random();
+    if v_roll < 0.02 then
+      v_pct := floor(random()*6 + 5)::int;
+      v_discount := round(v_total * v_pct / 100.0)::bigint;
+      v_total := v_total - v_discount;
+      update app_settings set value = ((value::int)-1)::text where key='public_offer_remaining';
+      select value into v_active from app_settings where key='public_offer_active';
+      -- auto-stop when remaining hits 0
+      if (select value::int from app_settings where key='public_offer_remaining') <= 0 then
+        update app_settings set value='0' where key='public_offer_active';
+      end if;
+      insert into public_orders (code, total, customer_name, customer_class, customer_section, event_name, original_total, discount_percent, discount_amount, is_discounted)
+      values (v_code, v_total, btrim(p_name), btrim(p_class), btrim(p_section), btrim(p_event), v_original, v_pct, v_discount, true) returning id into v_oid;
+      for v_el in select * from jsonb_array_elements(p_items) loop
+        v_id := (v_el->>'itemId')::bigint; v_qty := (v_el->>'qty')::int;
+        select * into v_item from items where id=v_id;
+        insert into public_order_items (order_id, item_id, name, emoji, price, qty, line_total)
+        values (v_oid, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price*v_qty);
+        update items set stock = stock - v_qty, updated_at=now() where id=v_id;
+      end loop;
+      return public_order_full(v_oid);
+    end if;
+  end if;
   insert into public_orders (code, total, customer_name, customer_class, customer_section, event_name)
   values (v_code, v_total, btrim(p_name), btrim(p_class), btrim(p_section), btrim(p_event)) returning id into v_oid;
   for v_el in select * from jsonb_array_elements(p_items) loop

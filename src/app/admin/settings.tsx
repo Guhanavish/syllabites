@@ -48,6 +48,32 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     }
   }
 
+  async function changeSectionPw(section: 'boys' | 'girls', e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const pw = String(new FormData(e.currentTarget).get('spw') || '')
+    try {
+      await api('/api/admin/section-password', { method: 'POST', body: { section, newPassword: pw } })
+      toast(`${section === 'boys' ? 'Boys' : 'Girls'} password updated ✓`, 'ok')
+      e.currentTarget.reset()
+    } catch (ex: any) {
+      if (isSessionExpired(ex)) { expired(ex); return }
+      toast(ex.message || 'Could not update password', 'bad')
+    }
+  }
+
+  const [offer, setOffer] = useState<any>(null)
+  const loadOffer = useCallback(async () => {
+    try { setOffer(await api('/api/admin/offer/status')) } catch {}
+  }, [])
+  useEffect(() => { loadOffer() }, [loadOffer])
+  async function startOffer() {
+    try {
+      const r = await api('/api/admin/offer/start', { method: 'POST' })
+      toast('Offer started — 2 lucky orders will get 5-10% off! 🎉', 'ok')
+      loadOffer()
+    } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
+  }
+
   async function changeAdminPw(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
@@ -153,6 +179,55 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         <p style={{ color: 'var(--muted)', fontSize: 11.5, fontWeight: 600, marginTop: 10 }}>
           Forgot it? Use “Forgot password?” on the lock screen → answer your security question.
         </p>
+      </div>
+
+      {/* ---- section passwords ---- */}
+      <div className="card pad" style={{ marginBottom: 14 }}>
+        <b style={{ fontSize: 15 }}>Boys / Girls section passwords</b>
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
+          Separate passwords for each counter. Only admin can change them. Current defaults: Boys <code>boyzz</code>, Girls <code>girls</code>.
+        </p>
+        <form onSubmit={(e) => changeSectionPw('boys', e)} noValidate style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Boys password</label><input name="spw" type="password" placeholder="New boys password" /></div>
+          <button className="btn btn-dark" style={{ height: 48 }}>Update</button>
+        </form>
+        <form onSubmit={(e) => changeSectionPw('girls', e)} noValidate style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Girls password</label><input name="spw" type="password" placeholder="New girls password" /></div>
+          <button className="btn btn-dark" style={{ height: 48 }}>Update</button>
+        </form>
+      </div>
+
+      {/* ---- discount offer (public orders only) ---- */}
+      <div className="card pad" style={{ marginBottom: 14 }}>
+        <b style={{ fontSize: 15 }}>🎁 Public order discount offer</b>
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
+          5-10% off on 2 random orders out of 100 (2% chance). Only for entrance (public) orders. Click Start to activate.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
+          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (2/100)</button>
+          <button className="btn btn-ghost" onClick={loadOffer}>↻ Status</button>
+        </div>
+        {offer && (
+          <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: 12 }}>
+            <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? '🟢 Active' : '⚪ Inactive'} · Remaining: {offer.remaining} / 2</div>
+            {offer.discountedOrders?.length ? (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Report — discounted orders:</div>
+                {offer.discountedOrders.map((d: any) => (
+                  <div key={d.code} className="alert-row" style={{ padding: '8px 0' }}>
+                    <span className="alert-emoji">🎟️</span>
+                    <span className="alert-name">
+                      Code <b>{d.code}</b> — {d.customerName} ({d.customerClass}) · {d.discountPercent}% off
+                      <br /><small style={{ color: 'var(--muted)' }}>{d.originalTotal ? `${((d.originalTotal)/100).toFixed(2)} → ${(d.total/100).toFixed(2)}` : ''} · Saved {d.discountAmount ? (d.discountAmount/100).toFixed(2) : ''}</small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600, marginTop: 8 }}>No discounted orders yet.</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ---- admin password ---- */}

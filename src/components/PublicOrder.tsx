@@ -7,7 +7,7 @@ import { toast, buzz, chime } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
 
 type Cart = Record<string, number>
-type Placed = { id: number; code: string; total: number; items: { name: string; emoji: string; qty: number; lineTotal: number }[] }
+type Placed = { id: number; code: string; total: number; originalTotal?: number; discountPercent?: number; discountAmount?: number; isDiscounted?: boolean; items: { name: string; emoji: string; qty: number; lineTotal: number }[] }
 
 export function PublicOrder() {
   const [items, setItems] = useState<MenuItem[]>([])
@@ -69,7 +69,7 @@ export function PublicOrder() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || 'Could not place order')
-      setPlaced({ id: data.id, code: data.code, total: data.total, items: data.items })
+      setPlaced({ id: data.id, code: data.code, total: data.total, originalTotal: data.originalTotal, discountPercent: data.discountPercent, discountAmount: data.discountAmount, isDiscounted: data.isDiscounted, items: data.items })
       setCart({})
       chime(); buzz([30, 60, 30])
     } catch (e: any) {
@@ -80,6 +80,13 @@ export function PublicOrder() {
   if (placed) {
     return (
       <div className="scroll" style={{ paddingBottom: 24 }}>
+        {placed.isDiscounted && (
+          <div style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)', color: '#fff', borderRadius: 18, padding: '16px 14px', textAlign: 'center', marginBottom: 14, animation: 'pop .45s cubic-bezier(.2,.9,.3,1.3)' }}>
+            <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: '.02em' }}>Yay!!, You Got the Discount</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, opacity: .95 }}>{placed.discountPercent}% OFF — You saved {inr(placed.discountAmount || 0)}! 🎉</div>
+            <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, opacity: .9 }}>Original {inr(placed.originalTotal || 0)} → Now {inr(placed.total)}</div>
+          </div>
+        )}
         <div style={{ textAlign: 'center', padding: '18px 0 10px' }}>
           <div className="check-circle" style={{ margin: '0 auto' }}><span>✓</span></div>
           <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order placed!</h2>
@@ -88,7 +95,13 @@ export function PublicOrder() {
         <div className="card pad" style={{ textAlign: 'center', marginTop: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--muted)' }}>YOUR CODE</div>
           <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: '.18em', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>{placed.code}</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{inr(placed.total)} · {placed.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>
+            {placed.isDiscounted ? (
+              <><span style={{ textDecoration: 'line-through', opacity: .7 }}>{inr(placed.originalTotal || 0)}</span>{' → '}<span style={{ color: 'var(--ok)', fontWeight: 900 }}>{inr(placed.total)}</span>{' · '}{placed.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</>
+            ) : (
+              <>{inr(placed.total)} · {placed.items.map(i => `${i.qty}× ${i.name}`).join(', ')}</>
+            )}
+          </div>
         </div>
         <button className="btn btn-primary xl block" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>Place another order</button>
         <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 10 }}>Keep this code safe — it will not be shown again.</p>

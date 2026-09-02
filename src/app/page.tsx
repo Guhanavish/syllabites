@@ -10,6 +10,11 @@ export default function Landing() {
   const router = useRouter()
   const [section, setSection] = useState<Section>(null)
   const [busy, setBusy] = useState(false)
+  const [showPwd, setShowPwd] = useState<Section>(null)
+  const [pwd, setPwd] = useState('')
+  const [pwdErr, setPwdErr] = useState('')
+  const [pwdBusy, setPwdBusy] = useState(false)
+  const [showRolePopup, setShowRolePopup] = useState<Section>(null)
 
   useEffect(() => {
     try { setSection(localStorage.getItem('fc.section') as Section) } catch {}
@@ -19,12 +24,35 @@ export default function Landing() {
     buzz(10)
     setSection(s)
     localStorage.setItem('fc.section', s)
+    setPwd(''); setPwdErr('')
+    setShowPwd(s)
+  }
+
+  async function submitPwd(e: React.FormEvent) {
+    e.preventDefault()
+    if (!showPwd) return
+    setPwdBusy(true); setPwdErr('')
+    try {
+      const res = await fetch('/api/section/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section: showPwd, password: pwd })
+      })
+      const data = await res.json().catch(()=>({}))
+      if (!res.ok) throw new Error(data.error || 'Wrong password')
+      buzz(15)
+      setShowPwd(null)
+      setShowRolePopup(showPwd)
+    } catch (ex: any) {
+      setPwdErr(ex.message || 'Wrong password')
+    } finally { setPwdBusy(false) }
   }
 
   async function go(role: 'sender' | 'receiver') {
-    if (!section || busy) return
+    if (!showRolePopup || busy) return
     setBusy(true)
+    localStorage.setItem('fc.section', showRolePopup)
     localStorage.setItem('fc.role', role)
+    setSection(showRolePopup)
     buzz(15)
     router.push(role === 'sender' ? '/sender' : '/receiver')
   }
@@ -56,29 +84,54 @@ export default function Landing() {
         </button>
       </div>
 
-      {section && (
-        <div key={section}>
-          <div className="landing-label">I am here to…</div>
-          <div className="role-grid">
-            <button className="role-btn" disabled={busy} onClick={() => go('sender')}>
-              <span className="rb-ico">🧑‍🍳</span>
-              <b>Order Sender</b>
-              <small>Browse menu &amp; send food orders from your phone</small>
-            </button>
-            <button className="role-btn" disabled={busy} onClick={() => go('receiver')}>
-              <span className="rb-ico">📋</span>
-              <b>Order Receiver</b>
-              <small>Counter view — receive &amp; manage live orders</small>
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="landing-foot">
         <button className="admin-link" onClick={() => router.push('/admin')}>
           🔐 Admin login
         </button>
       </div>
+
+      {/* Password popup */}
+      {showPwd && (
+        <div className="confirm-wrap show" style={{ zIndex: 70 }}>
+          <div className="confirm-card" style={{ maxWidth: 360 }}>
+            <h3>{showPwd === 'boys' ? '👦 Boys' : '👧 Girls'} password</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>Enter the {showPwd} section password to continue.</p>
+            <form onSubmit={submitPwd} noValidate style={{ marginTop: 14 }}>
+              {pwdErr && <div className="form-error show">{pwdErr}</div>}
+              <div className="field">
+                <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="Password" autoFocus />
+              </div>
+              <div className="confirm-actions">
+                <button type="button" className="btn btn-ghost" onClick={()=>setShowPwd(null)}>Cancel</button>
+                <button type="submit" className={`btn btn-primary${pwdBusy?' loading':''}`} disabled={pwdBusy}>Unlock</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Role selection popup */}
+      {showRolePopup && (
+        <div className="confirm-wrap show" style={{ zIndex: 70 }}>
+          <div className="confirm-card" style={{ maxWidth: 360 }}>
+            <h3>{showRolePopup === 'boys' ? '👦 Boys' : '👧 Girls'} — choose role</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>How will you use this device?</p>
+            <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
+              <button className="role-btn" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: '14px 16px' }} disabled={busy} onClick={() => go('sender')}>
+                <span className="rb-ico" style={{ fontSize: 28 }}>🧑‍🍳</span>
+                <span><b>Order Sender</b><br /><small>Browse menu &amp; send orders</small></span>
+              </button>
+              <button className="role-btn" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: '14px 16px' }} disabled={busy} onClick={() => go('receiver')}>
+                <span className="rb-ico" style={{ fontSize: 28 }}>📋</span>
+                <span><b>Order Receiver</b><br /><small>Counter view — manage orders</small></span>
+              </button>
+            </div>
+            <div style={{ marginTop: 14, textAlign: 'center' }}>
+              <button className="admin-link" onClick={()=>setShowRolePopup(null)}>← Back</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
