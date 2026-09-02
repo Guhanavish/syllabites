@@ -633,9 +633,9 @@ language plpgsql security definer set search_path = public, extensions as $$
 begin
   perform admin_verify(p_token);
   update app_settings set value='1' where key='public_offer_active';
-  update app_settings set value='2' where key='public_offer_remaining';
+  update app_settings set value='3' where key='public_offer_remaining';
   -- clear previous discounted order flags for fresh run? keep history but reset active
-  return jsonb_build_object('active', true, 'remaining', 2);
+  return jsonb_build_object('active', true, 'remaining', 3);
 end $$;
 
 create or replace function admin_offer_status(p_token text) returns jsonb
@@ -967,7 +967,7 @@ begin
   select value::int into v_remaining from app_settings where key='public_offer_remaining';
   if v_active='1' and coalesce(v_remaining,0) > 0 then
     v_roll := random();
-    if v_roll < 0.04 then
+    if v_roll < 0.06 then
       v_pct := floor(random()*6 + 5)::int;
       v_discount := round(v_total * v_pct / 100.0)::bigint;
       v_total := v_total - v_discount;

@@ -69,7 +69,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   async function startOffer() {
     try {
       const r = await api('/api/admin/offer/start', { method: 'POST' })
-      toast('Offer started — 2 lucky orders will get 5-10% off! 🎉', 'ok')
+      toast('Offer started — 3 lucky orders will get 5-10% off! 🎉', 'ok')
       loadOffer()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -201,15 +201,15 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       <div className="card pad" style={{ marginBottom: 14 }}>
         <b style={{ fontSize: 15 }}>🎁 Public order discount offer</b>
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
-          5-10% off on 2 random orders out of 50 (4% chance). Only for entrance (public) orders. Click Start to activate.
+          5-10% off on 3 random orders out of 50 (6% chance). Only for entrance (public) orders. Click Start to activate.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (2/50)</button>
+          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (3/50)</button>
           <button className="btn btn-ghost" onClick={loadOffer}>↻ Status</button>
         </div>
         {offer && (
           <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? '🟢 Active' : '⚪ Inactive'} · Remaining: {offer.remaining} / 2</div>
+            <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? '🟢 Active' : '⚪ Inactive'} · Remaining: {offer.remaining} / 3</div>
             {offer.discountedOrders?.length ? (
               <div style={{ marginTop: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Report — discounted orders:</div>
