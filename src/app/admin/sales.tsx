@@ -151,13 +151,19 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
 function PublicOrdersCard() {
   const [orders, setOrders] = useState<any[]>([])
   const [err, setErr] = useState('')
+  const [q, setQ] = useState('')
   const load = useCallback(async () => {
     try {
       const data = await api<any[]>('/api/public/admin-list')
       setOrders(Array.isArray(data) ? data : [])
     } catch (e: any) { setErr(e.message || 'Could not load') }
   }, [])
-  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t) }, [load])
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t) }, [load])
+  const filtered = orders.filter((o: any) => {
+    if (!q.trim()) return true
+    const s = `${o.code} ${o.id}`.toLowerCase()
+    return s.includes(q.trim().toLowerCase())
+  })
 
   async function updateStatus(o: any, status: string) {
     try {
@@ -175,12 +181,18 @@ function PublicOrdersCard() {
           <a href="/admin/public-orders" className="btn sm ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View →</a>
         </div>
       </div>
+      <div className="search-wrap" style={{ marginTop: 10 }}>
+        <span className="s-ico">🔎</span>
+        <input type="text" placeholder="Search order number (e.g. 632382)…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
+      </div>
       {err ? <div className="form-error show" style={{ marginTop: 8 }}>{err}</div> : null}
-      {!orders.length ? (
-        <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>No public orders yet. They appear here with their 6-digit code — staff and other users cannot see them.</p>
+      {!filtered.length ? (
+        <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>
+          {q ? `No match for "${q}"` : 'No public orders yet. They appear here with their 6-digit code — staff and other users cannot see them.'}
+        </p>
       ) : (
         <div style={{ marginTop: 10 }}>
-          {orders.slice(0, 3).map((o) => (
+          {filtered.slice(0, 3).map((o) => (
             <div key={o.id} className="order-card enter" style={{ marginBottom: 10, padding: 12 }}>
               <div className="order-head">
                 <div className="token-chip"><span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span></div>
@@ -208,9 +220,9 @@ function PublicOrdersCard() {
               )}
             </div>
           ))}
-          {orders.length > 3 && (
+          {filtered.length > 3 && (
             <div style={{ textAlign: 'center', marginTop: 8 }}>
-              <a href="/admin/public-orders" className="btn sm ghost">View all {orders.length} orders →</a>
+              <a href="/admin/public-orders" className="btn sm ghost">View all {filtered.length} orders →</a>
             </div>
           )}
         </div>

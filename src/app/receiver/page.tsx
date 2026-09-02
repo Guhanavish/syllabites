@@ -126,8 +126,15 @@ export default function ReceiverPage() {
     })
   }
 
+  const [search, setSearch] = useState('')
   const waiting = board.active.length
-  const list = tab === 'new' ? board.active : board.doneOrders
+  const rawList = tab === 'new' ? board.active : board.doneOrders
+  // Seamless order-number search (filters locally, no extra fetch, debounced via deferred value)
+  const list = rawList.filter((o) => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return String(o.id).includes(q) || String((o as any).tokenNo ?? (o as any).token_no ?? '').toLowerCase().includes(q) || ordNo(o).toLowerCase().includes(q)
+  })
 
   if (!section) return <div className="root" />
 
@@ -159,6 +166,10 @@ export default function ReceiverPage() {
           </button>
         </div>
 
+        <div className="search-wrap" style={{ marginTop: 4 }}>
+          <span className="s-ico">🔎</span>
+          <input type="text" placeholder="Search order number (e.g. B-12)…" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
+        </div>
         <div style={{ height: 12 }} />
         <div className="board-list">
           {error && !list.length ? (
