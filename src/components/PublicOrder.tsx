@@ -117,7 +117,7 @@ export function PublicOrder() {
           <div className="field" style={{ marginBottom: 0 }}><label>Name</label><input type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} /></div>
           <div className="field" style={{ marginBottom: 0 }}><label>Class</label><input type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} /></div>
           <div className="field" style={{ marginBottom: 0 }}><label>Section</label><input type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} /></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>Event participating</label><input type="text" placeholder="e.g. Dance" value={eventName} onChange={e=>setEventName(e.target.value)} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Event participating</label><input type="text" placeholder="" value={eventName} onChange={e=>setEventName(e.target.value)} /></div>
         </div>
       </div>
 

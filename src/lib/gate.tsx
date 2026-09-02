@@ -13,7 +13,13 @@ type Mode = { kind: 'enter' } | { kind: 'reset' }
  * locked out again automatically when the password changes.
  */
 export function GateLock({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<'checking' | 'locked' | 'open'>('checking')
+  const [state, setState] = useState<'checking' | 'locked' | 'open'>(() => {
+    // instant optimistic open from cache — avoids page-switch lag
+    try {
+      if (typeof window !== 'undefined' && localStorage.getItem('fc.gate')) return 'open'
+    } catch {}
+    return 'checking'
+  })
   const [mode, setMode] = useState<Mode>({ kind: 'enter' })
   const [gateTab, setGateTab] = useState<'welcome' | 'order' | 'staff'>('welcome')
   const [busy, setBusy] = useState(false)
@@ -27,7 +33,11 @@ export function GateLock({ children }: { children: ReactNode }) {
       if (saved.v === st.version) setState('open')
       else setState('locked')
     } catch {
-      setState('open') // server unreachable: don't trap offline users
+      // keep optimistic open on error to avoid blocking navigation
+      try {
+        if (localStorage.getItem('fc.gate')) setState('open')
+        else setState('locked')
+      } catch { setState('locked') }
     }
   }, [])
 
