@@ -7,6 +7,10 @@ export type Stats = {
   sections: Record<'boys' | 'girls', { revenue: number; orders: number }>
   topItems: { name: string; emoji: string; sold: number; revenue: number }[]
   lowStock: { id: number; name: string; emoji: string; stock: number }[]
+  parcelRevenue?: number
+  parcelOrders?: number
+  publicOrders?: number
+  parcelLowStock?: { id: number; name: string; emoji: string; stock: number }[]
   devices?: {
     boys: { sender: number; receiver: number; total: number }
     girls: { sender: number; receiver: number; total: number }

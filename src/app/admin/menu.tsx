@@ -9,14 +9,22 @@ import { toast, buzz, openSheet, closeSheet, confirmBox } from '@/lib/ui'
 const EMOJIS = ['🍽️', '🍛', '🍜', '🍕', '🍔', '🍟', '🌮', '🥪', '🥟', '🍗', '🥗', '🍚', '🫓', '🥞', '🍩', '🍪', '🍰', '🍦', '🍫', '☕', '🧋', '🥤', '🍿', '🍤', '🍳', '🧆', '🌯', '🥐']
 
 export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
+  const [mode, setMode] = useState<'staff' | 'parcel'>('staff')
   const [items, setItems] = useState<MenuItem[]>([])
   const [q, setQ] = useState('')
 
+  const saveEndpoint = mode === 'staff' ? '/api/items/save' : '/api/parcel/items/save'
+  const deleteEndpoint = mode === 'staff' ? '/api/items/delete' : '/api/parcel/items/delete'
+
   const load = useCallback(async () => {
-    try { setItems(await api<MenuItem[]>('/api/items')) } catch (e: any) { expired(e) }
-  }, [expired])
+    try { setItems(await api<MenuItem[]>(mode === 'staff' ? '/api/items' : '/api/parcel/items')) } catch (e: any) { expired(e) }
+  }, [expired, mode])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const p = setInterval(load, 15000)
+    return () => clearInterval(p)
+  }, [load])
 
   const list = items.filter((i) =>
     !q || i.name.toLowerCase().includes(q.toLowerCase()) || i.category.toLowerCase().includes(q.toLowerCase())
@@ -27,6 +35,8 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
       <ItemForm
         item={item}
         categories={Array.from(new Set(items.map((i) => i.category)))}
+        saveEndpoint={saveEndpoint}
+        titleSuffix={mode === 'parcel' ? ' (parcel)' : ''}
         onSaved={() => {
           closeSheet(); buzz(15)
           toast(item ? 'Item updated ✓' : 'Item added to menu ✓', 'ok')
@@ -38,7 +48,7 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
 
   async function toggle(it: MenuItem) {
     try {
-      await api('/api/items/save', { method: 'POST', body: { ...it, available: !it.available } })
+      await api(saveEndpoint, { method: 'POST', body: { ...it, available: !it.available } })
       setItems(items.map((x) => (x.id === it.id ? { ...x, available: !x.available } : x)))
       toast(!it.available ? `"${it.name}" hidden from menu` : `"${it.name}" is live again`, 'ok')
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
@@ -52,14 +62,41 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
     })
     if (!ok) return
     try {
-      await api('/api/items/delete', { method: 'POST', body: { id: it.id } })
+      await api(deleteEndpoint, { method: 'POST', body: { id: it.id } })
       toast('Item deleted', 'ok')
+      load()
+    } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
+  }
+
+  async function copyStaffToParcel() {
+    const ok = await confirmBox({
+      title: 'Copy staff menu to parcel?',
+      msg: 'Parcel menu will be replaced with a copy of the current staff menu. Parcel stock stays independent afterwards.',
+      yes: 'Copy menu',
+      danger: false,
+    })
+    if (!ok) return
+    try {
+      const r = await api<{ copied: number }>('/api/parcel/items/copy', { method: 'POST' })
+      toast(`Parcel menu updated (${r.copied} items) ✓`, 'ok')
       load()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
 
   return (
     <>
+      <div className="range-seg" style={{ marginBottom: 12 }}>
+        <button className={mode === 'staff' ? 'on' : ''} onClick={() => setMode('staff')}>👦👧 Staff menu</button>
+        <button className={mode === 'parcel' ? 'on' : ''} onClick={() => setMode('parcel')}>📦 Parcel menu</button>
+      </div>
+      {mode === 'parcel' && (
+        <div className="card pad" style={{ marginBottom: 12, background: 'var(--bg-soft)' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)' }}>
+            Parcel has its own menu + stock. Staff orders never touch parcel stock and parcel orders never touch staff stock.
+          </div>
+          <button className="btn btn-ghost sm" style={{ marginTop: 8 }} onClick={copyStaffToParcel}>⧉ Copy staff menu to parcel</button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <div className="search-wrap" style={{ flex: 1, margin: 0 }}>
           <span className="s-ico">🔎</span>
@@ -101,9 +138,11 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
   )
 }
 
-function ItemForm({ item, categories, onSaved }: {
+function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
   item: MenuItem | null
   categories: string[]
+  saveEndpoint: string
+  titleSuffix: string
   onSaved: () => void
 }) {
   const [emoji, setEmoji] = useState(item?.emoji || '🍽️')
@@ -127,7 +166,7 @@ function ItemForm({ item, categories, onSaved }: {
     if (!payload.name) { setErr('Item name is required'); return }
     setBusy(true)
     try {
-      await api('/api/items/save', { method: 'POST', body: payload })
+      await api(saveEndpoint, { method: 'POST', body: payload })
       onSaved()
     } catch (ex: any) {
       setErr(ex.message || 'Save failed')
@@ -139,7 +178,7 @@ function ItemForm({ item, categories, onSaved }: {
   return (
     <>
       <div className="sheet-head">
-        <h2>{item ? 'Edit item' : 'Add new item'}</h2>
+        <h2>{item ? 'Edit item' : 'Add new item'}{titleSuffix}</h2>
         <button className="icon-btn" onClick={() => closeSheet()}>✕</button>
       </div>
       <form className="sheet-body" onSubmit={save} noValidate>

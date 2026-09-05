@@ -24,7 +24,8 @@ export function PublicOrder() {
 
   const loadMenu = useCallback(async () => {
     try {
-      const { data } = await sb().from('items').select('*').order('id')
+      // Parcel menu is separate storage (parcel_items) — staff items never leak here
+      const { data } = await sb().from('parcel_items').select('*').order('id')
       const list = (data || []) as any[]
       setItems(list)
       setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
@@ -33,6 +34,16 @@ export function PublicOrder() {
 
   useEffect(() => { loadMenu() }, [loadMenu])
   useEffect(() => { const t = setInterval(loadMenu, 12000); return () => clearInterval(t) }, [loadMenu])
+
+  // realtime primary for parcel menu; polling above is the fallback
+  useEffect(() => {
+    const ch = sb()
+      .channel('parcel-menu-' + Math.random())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'parcel_items' }, () => loadMenu())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'public_orders' }, () => loadMenu())
+      .subscribe()
+    return () => { sb().removeChannel(ch) }
+  }, [loadMenu])
 
   function addToCart(id: number, delta: number) {
     const it = items.find((x) => x.id === id)

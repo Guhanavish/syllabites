@@ -5,7 +5,7 @@ import { api, isSessionExpired } from '@/lib/client'
 import { toast } from '@/lib/ui'
 import { confirmBox } from '@/lib/ui'
 
-type Backup = { id: number; label: string; createdAt: string; items: number; orders: number }
+type Backup = { id: number; label: string; createdAt: string; items: number; orders: number; parcelItems?: number; publicOrders?: number }
 
 export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolean; onLogout: () => void }) {
   const [err, setErr] = useState('')
@@ -265,7 +265,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
                 <br />
                 <small style={{ color: 'var(--muted)' }}>
                   {new Date(b.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}
-                  {' · '}{b.items} items · {b.orders} orders
+                  {' · '}{b.items} staff items{b.parcelItems != null ? ` · ${b.parcelItems} parcel` : ''} · {b.orders} orders{b.publicOrders != null ? ` · ${b.publicOrders} parcel orders` : ''}
                 </small>
               </span>
               <button className="btn sm ghost" onClick={() => importBackup(b)}>Import</button>

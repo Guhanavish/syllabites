@@ -1040,3 +1040,536 @@
       'total', (select count(*) from device_presence where last_seen > now() - interval '2 minutes')
     )
   $$;
+
+-- ============================================================
+--  PARCEL MENU SEPARATION (bidirectional isolation)
+--  Staff sender/receiver flows use items / orders / order_items.
+--  Public/parcel flows use parcel_items / public_orders /
+--  public_order_items. Separate storage, separate admin CRUD.
+--  Parcel menu is seeded once from the staff menu so both show
+--  the same menu initially, then diverge independently.
+-- ============================================================
+create table if not exists parcel_items (
+  id         bigint primary key generated always as identity,
+  name       text not null check (length(btrim(name)) between 1 and 60),
+  emoji      text not null default '🍽️',
+  category   text not null default 'Snacks',
+  price      bigint not null check (price > 0 and price <= 100000000),
+  stock      int not null default 0 check (stock >= 0),
+  available  boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table parcel_items enable row level security;
+drop policy if exists "parcel_items_read" on parcel_items;
+create policy "parcel_items_read" on parcel_items for select using (true);
+
+do $$
+begin
+  begin alter publication supabase_realtime add table parcel_items;
+  exception when duplicate_object then null; when undefined_object then null; end;
+end $$;
+
+-- ---------- public_orders discount columns (idempotent) ----------
+do $$ begin
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='original_total') then
+    alter table public_orders add column original_total bigint not null default 0;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='discount_percent') then
+    alter table public_orders add column discount_percent int not null default 0;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='discount_amount') then
+    alter table public_orders add column discount_amount bigint not null default 0;
+  end if;
+  if not exists (select 1 from information_schema.columns where table_name='public_orders' and column_name='is_discounted') then
+    alter table public_orders add column is_discounted boolean not null default false;
+  end if;
+end $$;
+
+update public_orders set original_total = total where original_total = 0;
+
+-- ---------- offer keys always exist ----------
+insert into app_settings (key, value) values
+  ('public_offer_active', '0'),
+  ('public_offer_remaining', '0')
+on conflict (key) do nothing;
+
+-- ---------- public order view (with discount fields) ----------
+create or replace function public_order_full(p_order_id bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select to_jsonb(t) from (
+    select o.id, o.code, o.total, o.status, o.created_at as "createdAt",
+      o.customer_name as "customerName", o.customer_class as "customerClass",
+      o.customer_section as "customerSection", o.event_name as "eventName",
+      o.original_total as "originalTotal",
+      o.discount_percent as "discountPercent",
+      o.discount_amount as "discountAmount",
+      o.is_discounted as "isDiscounted",
+      (select coalesce(jsonb_agg(jsonb_build_object('name', oi.name,'emoji',oi.emoji,'price',oi.price,'qty',oi.qty,'lineTotal',oi.line_total) order by oi.id),'[]')
+      from public_order_items oi where oi.order_id=o.id) as items
+    from public_orders o where o.id=p_order_id
+  ) t
+$$;
+
+-- ---------- parcel ordering (parcel_items ONLY — staff stock untouched) ----------
+create or replace function public_place_order(p_items jsonb, p_name text, p_class text, p_section text, p_event text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_item parcel_items%rowtype;
+  v_el jsonb;
+  v_id bigint;
+  v_qty int;
+  v_qty_text text;
+  v_total bigint := 0;
+  v_original bigint := 0;
+  v_oid bigint;
+  v_code char(6);
+  v_name text;
+  v_class text;
+  v_section text;
+  v_event text;
+  v_active_text text;
+  v_remaining int;
+  v_is_discounted boolean := false;
+  v_percent int := 0;
+  v_discount bigint := 0;
+begin
+  v_name := coalesce(p_name, '');
+  v_name := btrim(v_name);
+  if v_name = '' then raise exception 'Please enter your Name'; end if;
+  v_class := coalesce(p_class, '');
+  v_class := btrim(v_class);
+  if v_class = '' then raise exception 'Please enter your Class'; end if;
+  v_section := coalesce(p_section, '');
+  v_section := btrim(v_section);
+  if v_section = '' then raise exception 'Please enter your Section'; end if;
+  v_event := coalesce(p_event, '');
+  v_event := btrim(v_event);
+  if v_event = '' then raise exception 'Please enter Event participating'; end if;
+  if p_items is null or jsonb_typeof(p_items)<>'array' or jsonb_array_length(p_items)=0 or jsonb_array_length(p_items)>50 then
+    raise exception 'Your cart is empty'; end if;
+
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id := (v_el->>'itemId')::bigint;
+    v_qty_text := v_el->>'qty';
+    if v_qty_text is null or v_qty_text = '' then v_qty := 0;
+    else v_qty := v_qty_text::int;
+    end if;
+    if v_qty < 1 or v_qty > 10 then raise exception 'Approach Volunteers For more orders'; end if;
+    select * into v_item from parcel_items where id=v_id for update;
+    if not found then raise exception 'Something in your cart was just removed'; end if;
+    if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
+    if v_item.stock < v_qty then
+      if v_item.stock=0 then raise exception '"%" just went out of stock', v_item.name;
+      else raise exception 'Only % left of "%" ', v_item.stock, v_item.name; end if;
+    end if;
+    v_total := v_total + v_item.price * v_qty;
+  end loop;
+
+  v_original := v_total;
+
+  -- public-only lucky discount: 3 winners out of 50 (6%), 5-10% off
+  select coalesce((select value from app_settings where key='public_offer_active'), '0') into v_active_text;
+  select coalesce((select value::int from app_settings where key='public_offer_remaining'), 0) into v_remaining;
+  if v_active_text = '1' and v_remaining > 0 and random() < 0.06 then
+    perform pg_advisory_xact_lock(hashtext('public_offer'));
+    select coalesce((select value from app_settings where key='public_offer_active'), '0') into v_active_text;
+    select coalesce((select value::int from app_settings where key='public_offer_remaining'), 0) into v_remaining;
+    if v_active_text = '1' and v_remaining > 0 then
+      v_percent := 5 + floor(random()*6)::int;
+      v_discount := round(v_total * v_percent / 100.0)::bigint;
+      if v_discount < 1 then v_discount := 1; end if;
+      if v_discount >= v_total then v_discount := v_total - 1; end if;
+      v_total := v_total - v_discount;
+      v_is_discounted := true;
+      update app_settings set value = (v_remaining - 1)::text where key='public_offer_remaining';
+      if v_remaining - 1 <= 0 then
+        update app_settings set value='0' where key='public_offer_active';
+      end if;
+    end if;
+  end if;
+
+  v_code := generate_public_code();
+  begin
+    insert into public_orders (code, total, original_total, discount_percent, discount_amount, is_discounted, customer_name, customer_class, customer_section, event_name)
+    values (v_code, v_total, v_original, v_percent, v_discount, v_is_discounted, v_name, v_class, v_section, v_event) returning id into v_oid;
+  exception when unique_violation then
+    v_code := generate_public_code();
+    insert into public_orders (code, total, original_total, discount_percent, discount_amount, is_discounted, customer_name, customer_class, customer_section, event_name)
+    values (v_code, v_total, v_original, v_percent, v_discount, v_is_discounted, v_name, v_class, v_section, v_event) returning id into v_oid;
+  end;
+
+  for v_el in select * from jsonb_array_elements(p_items) loop
+    v_id := (v_el->>'itemId')::bigint;
+    v_qty_text := v_el->>'qty';
+    v_qty := v_qty_text::int;
+    select * into v_item from parcel_items where id=v_id;
+    insert into public_order_items (order_id, item_id, name, emoji, price, qty, line_total)
+    values (v_oid, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price*v_qty);
+    update parcel_items set stock = stock - v_qty, updated_at=now() where id=v_id;
+  end loop;
+  return public_order_full(v_oid);
+end $$;
+
+create or replace function admin_update_public_order_status(p_token text, p_order_id bigint, p_status text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform admin_verify(p_token);
+  if p_status not in ('completed','cancelled') then raise exception 'Unknown status'; end if;
+  update public_orders set status=p_status, updated_at=now() where id=p_order_id;
+  if not found then raise exception 'Order not found'; end if;
+  if p_status='cancelled' then
+    update parcel_items i set stock=i.stock+oi.qty, updated_at=now() from public_order_items oi where oi.order_id=p_order_id and oi.item_id=i.id;
+  end if;
+  return public_order_full(p_order_id);
+end $$;
+
+-- ---------- parcel admin CRUD (parcel_items ONLY — staff items untouched) ----------
+create or replace function admin_list_parcel_items(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_out jsonb;
+begin
+  perform admin_verify(p_token);
+  select coalesce(jsonb_agg(x order by x.category, x.name), '[]')
+    into v_out
+  from (
+    select i.*, coalesce(s.sold, 0) as sold
+    from parcel_items i
+    left join (select item_id, sum(qty) sold from public_order_items group by item_id) s
+      on s.item_id = i.id
+  ) x;
+  return v_out;
+end $$;
+
+create or replace function admin_save_parcel_item(p_token text, p_item jsonb) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_id bigint;
+  v_id_text text;
+  v_name text;
+  v_name_raw text;
+  v_emoji text;
+  v_emoji_raw text;
+  v_cat text;
+  v_cat_raw text;
+  v_price_text text;
+  v_price bigint;
+  v_stock_text text;
+  v_stock int;
+  v_avail_text text;
+  v_avail boolean;
+  v_row parcel_items%rowtype;
+begin
+  perform admin_verify(p_token);
+  v_id_text := p_item->>'id';
+  if v_id_text is null or v_id_text = '' then v_id := null;
+  else v_id := v_id_text::bigint;
+  end if;
+  v_name_raw := p_item->>'name';
+  if v_name_raw is null then v_name := '';
+  else v_name := btrim(v_name_raw);
+  end if;
+  v_emoji_raw := p_item->>'emoji';
+  if v_emoji_raw is null then v_emoji := '🍽️';
+  else
+    v_emoji := btrim(v_emoji_raw);
+    if v_emoji = '' then v_emoji := '🍽️'; end if;
+  end if;
+  v_cat_raw := p_item->>'category';
+  if v_cat_raw is null then v_cat := 'Snacks';
+  else
+    v_cat := btrim(v_cat_raw);
+    if v_cat = '' then v_cat := 'Snacks'; end if;
+  end if;
+  v_price_text := p_item->>'price';
+  if v_price_text is null or v_price_text = '' then v_price := 0;
+  else v_price := round(v_price_text::numeric * 100)::bigint;
+  end if;
+  v_stock_text := p_item->>'stock';
+  if v_stock_text is null or v_stock_text = '' then v_stock := 0;
+  else v_stock := v_stock_text::int;
+  end if;
+  v_avail_text := p_item->>'available';
+  if v_avail_text is null or v_avail_text = '' then v_avail := true;
+  else v_avail := v_avail_text::boolean;
+  end if;
+
+  if length(v_name) < 1 or length(v_name) > 60 then raise exception 'Item name is required'; end if;
+  if v_price <= 0 then raise exception 'Enter a valid price in ₹'; end if;
+  if v_stock < 0 or v_stock > 100000 then raise exception 'Stock must be between 0 and 100000'; end if;
+  if length(v_cat) > 30 then raise exception 'Category is too long'; end if;
+
+  if v_id is null then
+    insert into parcel_items (name, emoji, category, price, stock, available)
+    values (v_name, v_emoji, v_cat, v_price, v_stock, v_avail)
+    returning * into v_row;
+  else
+    update parcel_items set name=v_name, emoji=v_emoji, category=v_cat, price=v_price,
+                    stock=v_stock, available=v_avail, updated_at=now()
+    where id = v_id returning * into v_row;
+    if not found then raise exception 'Item not found'; end if;
+  end if;
+  return to_jsonb(v_row);
+end $$;
+
+create or replace function admin_delete_parcel_item(p_token text, p_id bigint) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform admin_verify(p_token);
+  delete from parcel_items where id = p_id;
+  if not found then raise exception 'Item not found'; end if;
+end $$;
+
+create or replace function admin_copy_staff_menu_to_parcel(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_count int;
+begin
+  perform admin_verify(p_token);
+  delete from parcel_items;
+  insert into parcel_items (name, emoji, category, price, stock, available)
+  select name, emoji, category, price, stock, available from items order by id;
+  get diagnostics v_count = row_count;
+  return jsonb_build_object('copied', v_count);
+end $$;
+
+-- ---------- offer controls (upsert-safe) ----------
+create or replace function admin_start_public_offer(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform admin_verify(p_token);
+  insert into app_settings (key, value) values ('public_offer_active','1')
+  on conflict (key) do update set value='1';
+  insert into app_settings (key, value) values ('public_offer_remaining','3')
+  on conflict (key) do update set value='3';
+  return jsonb_build_object('active', true, 'remaining', 3);
+end $$;
+
+create or replace function admin_offer_status(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare v_active text; v_remaining int; v_logs jsonb;
+begin
+  perform admin_verify(p_token);
+  select coalesce((select value from app_settings where key='public_offer_active'), '0') into v_active;
+  select coalesce((select value::int from app_settings where key='public_offer_remaining'), 0) into v_remaining;
+  select coalesce(jsonb_agg(jsonb_build_object('code', code, 'customerName', customer_name, 'customerClass', customer_class, 'customerSection', customer_section, 'eventName', event_name, 'originalTotal', original_total, 'discountPercent', discount_percent, 'discountAmount', discount_amount, 'total', total, 'createdAt', created_at) order by id desc), '[]')
+  into v_logs from public_orders where is_discounted = true;
+  return jsonb_build_object('active', v_active='1', 'remaining', coalesce(v_remaining,0), 'discountedOrders', coalesce(v_logs, '[]'::jsonb));
+end $$;
+
+-- ---------- backups cover both menus + both order streams ----------
+create or replace function backup_payload() returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object(
+    'items',      (select coalesce(jsonb_agg(to_jsonb(i)), '[]'::jsonb) from items i),
+    'parcelItems', (select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb) from parcel_items p),
+    'orders',     (select coalesce(jsonb_agg(to_jsonb(o)), '[]'::jsonb) from orders o),
+    'orderItems', (select coalesce(jsonb_agg(to_jsonb(oi)), '[]'::jsonb) from order_items oi),
+    'publicOrders', (select coalesce(jsonb_agg(to_jsonb(po)), '[]'::jsonb) from public_orders po),
+    'publicOrderItems', (select coalesce(jsonb_agg(to_jsonb(poi)), '[]'::jsonb) from public_order_items poi)
+  )
+$$;
+
+create or replace function wipe_live_data() returns void
+language sql security definer set search_path = public, extensions as $$
+  truncate table order_items, orders, items, public_order_items, public_orders, parcel_items restart identity cascade;
+$$;
+
+create or replace function restore_payload(p_payload jsonb) returns void
+language plpgsql security definer set search_path = public, extensions as $$
+begin
+  perform wipe_live_data();
+
+  insert into items (id, name, emoji, category, price, stock, available, created_at, updated_at)
+  overriding system value
+  select (x->>'id')::bigint,
+        x->>'name',
+        coalesce(x->>'emoji', '🍽️'),
+        coalesce(x->>'category', 'Snacks'),
+        (x->>'price')::bigint,
+        (x->>'stock')::int,
+        coalesce((x->>'available')::boolean, true),
+        coalesce((x->>'created_at')::timestamptz, now()),
+        coalesce((x->>'updated_at')::timestamptz, now())
+  from jsonb_array_elements(coalesce(p_payload->'items', '[]'::jsonb)) x;
+
+  insert into parcel_items (id, name, emoji, category, price, stock, available, created_at, updated_at)
+  overriding system value
+  select (x->>'id')::bigint,
+        x->>'name',
+        coalesce(x->>'emoji', '🍽️'),
+        coalesce(x->>'category', 'Snacks'),
+        (x->>'price')::bigint,
+        (x->>'stock')::int,
+        coalesce((x->>'available')::boolean, true),
+        coalesce((x->>'created_at')::timestamptz, now()),
+        coalesce((x->>'updated_at')::timestamptz, now())
+  from jsonb_array_elements(coalesce(p_payload->'parcelItems', p_payload->'parcel_items', '[]'::jsonb)) x;
+
+  insert into orders (id, token_no, section, status, total, client_token, created_at, updated_at, created_day)
+  overriding system value
+  select (x->>'id')::bigint,
+        (x->>'token_no')::int,
+        x->>'section',
+        x->>'status',
+        (x->>'total')::bigint,
+        x->>'client_token',
+        coalesce((x->>'created_at')::timestamptz, now()),
+        coalesce((x->>'updated_at')::timestamptz, now()),
+        coalesce((x->>'created_day')::date, istoday())
+  from jsonb_array_elements(coalesce(p_payload->'orders', '[]'::jsonb)) x;
+
+  insert into order_items (id, order_id, item_id, name, emoji, price, qty, line_total)
+  overriding system value
+  select (x->>'id')::bigint,
+        (x->>'order_id')::bigint,
+        nullif(x->>'item_id','')::bigint,
+        x->>'name',
+        x->>'emoji',
+        (x->>'price')::bigint,
+        (x->>'qty')::int,
+        (x->>'line_total')::bigint
+  from jsonb_array_elements(coalesce(p_payload->'orderItems', '[]'::jsonb)) x;
+
+  insert into public_orders (id, code, total, original_total, discount_percent, discount_amount, is_discounted, status, customer_name, customer_class, customer_section, event_name, created_at, updated_at, created_day)
+  overriding system value
+  select (x->>'id')::bigint,
+        x->>'code',
+        (x->>'total')::bigint,
+        coalesce((x->>'original_total')::bigint, (x->>'total')::bigint, 0),
+        coalesce((x->>'discount_percent')::int, 0),
+        coalesce((x->>'discount_amount')::bigint, 0),
+        coalesce((x->>'is_discounted')::boolean, false),
+        coalesce(x->>'status', 'placed'),
+        coalesce(x->>'customer_name', ''),
+        coalesce(x->>'customer_class', ''),
+        coalesce(x->>'customer_section', ''),
+        coalesce(x->>'event_name', ''),
+        coalesce((x->>'created_at')::timestamptz, now()),
+        coalesce((x->>'updated_at')::timestamptz, now()),
+        coalesce((x->>'created_day')::date, istoday())
+  from jsonb_array_elements(coalesce(p_payload->'publicOrders', p_payload->'public_orders', '[]'::jsonb)) x;
+
+  insert into public_order_items (id, order_id, item_id, name, emoji, price, qty, line_total)
+  overriding system value
+  select (x->>'id')::bigint,
+        (x->>'order_id')::bigint,
+        nullif(x->>'item_id','')::bigint,
+        x->>'name',
+        x->>'emoji',
+        (x->>'price')::bigint,
+        (x->>'qty')::int,
+        (x->>'line_total')::bigint
+  from jsonb_array_elements(coalesce(p_payload->'publicOrderItems', p_payload->'public_order_items', '[]'::jsonb)) x;
+
+  perform setval(pg_get_serial_sequence('items', 'id'),
+                coalesce((select max(id) from items), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('parcel_items', 'id'),
+                coalesce((select max(id) from parcel_items), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('orders', 'id'),
+                coalesce((select max(id) from orders), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('order_items', 'id'),
+                coalesce((select max(id) from order_items), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('public_orders', 'id'),
+                coalesce((select max(id) from public_orders), 0) + 1, false);
+  perform setval(pg_get_serial_sequence('public_order_items', 'id'),
+                coalesce((select max(id) from public_order_items), 0) + 1, false);
+end $$;
+
+create or replace function admin_list_backups(p_token text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_out jsonb;
+begin
+  perform admin_verify(p_token);
+  select coalesce(jsonb_agg(jsonb_build_object(
+          'id', b.id,
+          'label', b.label,
+          'createdAt', b.created_at,
+          'items', jsonb_array_length(coalesce(b.payload->'items', '[]'::jsonb)),
+          'parcelItems', jsonb_array_length(coalesce(b.payload->'parcelItems', b.payload->'parcel_items', '[]'::jsonb)),
+          'orders', jsonb_array_length(coalesce(b.payload->'orders', '[]'::jsonb)),
+          'publicOrders', jsonb_array_length(coalesce(b.payload->'publicOrders', b.payload->'public_orders', '[]'::jsonb))
+        ) order by b.id desc), '[]')
+    into v_out
+  from backups b;
+  return v_out;
+end $$;
+
+-- ---------- stats: staff-only revenue + parcel visibility (no mixing) ----------
+create or replace function admin_stats(p_token text, p_range text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_from  date;
+  v_rev   bigint; v_cnt bigint; v_sold bigint; v_canc bigint;
+  v_sec   jsonb;  v_top jsonb; v_low jsonb; v_devices jsonb;
+  v_p_rev bigint; v_p_cnt bigint; v_p_low jsonb;
+begin
+  perform admin_verify(p_token);
+  if p_range = 'today' then v_from := istoday();
+  elsif p_range = 'week' then v_from := istoday() - 6;
+  else v_from := null; end if;
+
+  select coalesce(sum(total),0), count(*) into v_rev, v_cnt
+  from orders
+  where status <> 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(sum(oi.qty),0) into v_sold
+  from order_items oi join orders o on o.id = oi.order_id
+  where o.status <> 'cancelled' and (v_from is null or o.created_day >= v_from);
+
+  select count(*) into v_canc from orders
+  where status = 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(jsonb_build_object(
+          'boys',  jsonb_build_object('revenue', coalesce(sum(total) filter (where section='boys'),0), 'orders', count(*) filter (where section='boys')),
+          'girls', jsonb_build_object('revenue', coalesce(sum(total) filter (where section='girls'),0), 'orders', count(*) filter (where section='girls'))
+        ), jsonb_build_object('boys', jsonb_build_object('revenue',0,'orders',0), 'girls', jsonb_build_object('revenue',0,'orders',0))) into v_sec
+  from orders where status <> 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+          'name', t.name, 'emoji', t.emoji, 'sold', t.sold, 'revenue', t.revenue) order by t.sold desc), '[]')
+    into v_top
+  from (
+    select oi.name, max(oi.emoji) emoji, sum(oi.qty) sold, sum(oi.line_total) revenue
+    from order_items oi join orders o on o.id = oi.order_id
+    where o.status <> 'cancelled' and (v_from is null or o.created_day >= v_from)
+    group by oi.name order by sold desc limit 10
+  ) t;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+          'id', i.id, 'name', i.name, 'emoji', i.emoji, 'stock', i.stock) order by i.stock), '[]')
+    into v_low
+  from items i where i.stock <= 5;
+
+  select coalesce(sum(total),0), count(*) into v_p_rev, v_p_cnt
+  from public_orders
+  where status <> 'cancelled' and (v_from is null or created_day >= v_from);
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+          'id', i.id, 'name', i.name, 'emoji', i.emoji, 'stock', i.stock) order by i.stock), '[]')
+    into v_p_low
+  from parcel_items i where i.stock <= 5;
+
+  v_devices := device_counts();
+
+  return jsonb_build_object(
+    'range', coalesce(p_range,'all'),
+    'revenue', v_rev, 'orders', v_cnt, 'totalSold', v_sold, 'cancelled', v_canc,
+    'sections', v_sec,
+    'topItems', v_top,
+    'lowStock', v_low,
+    'parcelRevenue', v_p_rev,
+    'parcelOrders', v_p_cnt,
+    'parcelLowStock', v_p_low,
+    'publicOrders', v_p_cnt,
+    'devices', v_devices
+  );
+end $$;
+
+-- ---------- seed parcel menu from staff menu once (same menu, separate storage) ----------
+insert into parcel_items (name, emoji, category, price, stock, available)
+select name, emoji, category, price, stock, available from items
+where not exists (select 1 from parcel_items);

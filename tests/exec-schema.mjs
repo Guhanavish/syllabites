@@ -108,6 +108,53 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   const restoredMax = await db.exec(`select max(id) as m from items`)
   ok(Number(seqCheck[0].rows[0].id) > Number(restoredMax[0].rows[0].m) - 2,
     `sequences advanced past restored ids (new id ${seqCheck[0].rows[0].id}, max restored ${restoredMax[0].rows[0].m})`)
+
+  // parcel menu separation: bidirectional isolation
+  const parcelItem = await db.exec(
+    `select admin_save_parcel_item('${token}', '{"name":"Parcel Samosa","emoji":"🥟","category":"Snacks","price":15,"stock":10,"available":true}'::jsonb) as it`
+  )
+  const parcelId = toJ(parcelItem[0].rows[0].it).id
+  ok(!!parcelId, 'parcel item created #' + parcelId)
+
+  const parcelList = await db.exec(`select admin_list_parcel_items('${token}') as l`)
+  ok(Array.isArray(toJ(parcelList[0].rows[0].l)) && toJ(parcelList[0].rows[0].l).some((i) => i.id === parcelId), 'parcel items listed separately')
+
+  const staffList = await db.exec(`select admin_list_items('${token}') as l`)
+  ok(!toJ(staffList[0].rows[0].l).some((i) => i.name === 'Parcel Samosa'), 'staff menu isolated from parcel item')
+
+  const staffBefore = await db.exec(`select stock from items where id = ${itemId}`)
+  const parcelOrder = await db.exec(
+    `select public_place_order('[{"itemId":${parcelId},"qty":2}]'::jsonb, 'Test User', '10-A', 'A', 'Sports') as o`
+  )
+  const po = toJ(parcelOrder[0].rows[0].o)
+  ok(/^\d{6}$/.test(po.code) && po.total === 3000, `parcel order 6-digit code + total ₹30 (got ${po.code}, ${po.total})`)
+  ok('originalTotal' in po && 'isDiscounted' in po, 'parcel order exposes discount fields')
+
+  const parcelStock = await db.exec(`select stock from parcel_items where id = ${parcelId}`)
+  ok(parcelStock[0].rows[0].stock === 8, 'parcel stock decremented 10→8')
+
+  const staffAfter = await db.exec(`select stock from items where id = ${itemId}`)
+  ok(String(staffAfter[0].rows[0].stock) === String(staffBefore[0].rows[0].stock), 'staff stock untouched by parcel order')
+
+  // staff order must not touch parcel stock
+  const parcelBefore2 = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
+  await db.exec(`select place_order('girls', 'pgliteparceliso00001', '[{"itemId":${itemId},"qty":1}]'::jsonb) as o`)
+  const parcelAfter2 = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
+  ok(String(parcelBefore2) === String(parcelAfter2), 'parcel stock untouched by staff order')
+
+  // cancel parcel order restores parcel stock only
+  await db.exec(`select admin_update_public_order_status('${token}', ${po.id}, 'cancelled') as o`)
+  const parcelRestored = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
+  ok(parcelRestored === 10, 'parcel cancel restores parcel stock')
+
+  // backup covers both menus
+  const payload = await db.exec(`select backup_payload() as p`)
+  const pl = toJ(payload[0].rows[0].p)
+  ok(Array.isArray(pl.parcelItems) && Array.isArray(pl.publicOrders), 'backup payload includes parcel data')
+
+  const stats2 = await db.exec(`select admin_stats('${token}', 'today') as s`)
+  const st2 = toJ(stats2[0].rows[0].s)
+  ok(typeof st2.parcelRevenue === 'number' && typeof st2.parcelOrders === 'number', 'stats expose parcelRevenue/parcelOrders')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

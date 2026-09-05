@@ -142,5 +142,40 @@ const needKeys = ['id', 'tokenNo', 'section', 'status', 'total', 'clientToken', 
 const missingKeys = needKeys.filter((k) => !ofn || !ofn.body.toLowerCase().includes(k.toLowerCase()))
 ok(missingKeys.length === 0, 'order_full exposes every key the UI needs' + (missingKeys.length ? ' MISSING: ' + missingKeys : ''))
 
+console.log('— parcel separation —')
+ok(/create table if not exists parcel_items/i.test(sql), 'parcel_items table exists')
+ok(/create policy "parcel_items_read" on parcel_items/i.test(sql), 'parcel_items public read policy exists')
+ok(/admin_list_parcel_items/i.test(sql), 'admin_list_parcel_items RPC exists')
+ok(/admin_save_parcel_item/i.test(sql), 'admin_save_parcel_item RPC exists')
+ok(/admin_delete_parcel_item/i.test(sql), 'admin_delete_parcel_item RPC exists')
+ok(/admin_copy_staff_menu_to_parcel/i.test(sql), 'admin_copy_staff_menu_to_parcel RPC exists')
+{
+  const idx = sql.toLowerCase().lastIndexOf('create or replace function public_place_order')
+  const last = sql.slice(idx, idx + 8000)
+  ok(/from parcel_items/i.test(last), 'public_place_order reads parcel_items (parcel-only)')
+  ok(!/from items(?![\w_])/i.test(last), 'public_place_order does not touch staff items')
+}
+{
+  const staffOrder = [...sql.matchAll(/create or replace function place_order\([\s\S]*?\$\$([\s\S]*?)\$\$/gi)].map((x) => x[1]).join('\n')
+  ok(/from items/i.test(staffOrder), 'place_order (staff) still uses items')
+  ok(!/parcel_items/i.test(staffOrder), 'place_order (staff) never touches parcel_items')
+}
+{
+  const pubFull = [...sql.matchAll(/create or replace function public_order_full\([\s\S]*?\$\$([\s\S]*?)\$\$/gi)].map((x) => x[1]).pop() || ''
+  for (const k of ['originalTotal', 'discountPercent', 'discountAmount', 'isDiscounted']) {
+    ok(pubFull.toLowerCase().includes(k.toLowerCase()), `public_order_full exposes ${k}`)
+  }
+}
+ok(/original_total/i.test(sql) && /is_discounted/i.test(sql), 'public_orders has discount columns')
+{
+  const backupFn = [...sql.matchAll(/create or replace function backup_payload\([\s\S]*?\$\$([\s\S]*?)\$\$/gi)].map((x) => x[1]).pop() || ''
+  ok(/parcel_items/i.test(backupFn) && /public_orders/i.test(backupFn), 'backup_payload covers parcel + public orders')
+}
+{
+  const statsFn = [...sql.matchAll(/create or replace function admin_stats\([\s\S]*?\$\$([\s\S]*?)\$\$/gi)].map((x) => x[1]).pop() || ''
+  ok(/parcelRevenue/i.test(statsFn) && /parcelOrders/i.test(statsFn), 'admin_stats exposes parcel revenue/orders separately')
+}
+ok(!/coalesce\s*\(\s*nullif\s*\(\s*btrim/i.test(sql.slice(sql.lastIndexOf('PARCEL MENU SEPARATION'))), 'new parcel code avoids nested coalesce(nullif(btrim())) pitfall')
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
