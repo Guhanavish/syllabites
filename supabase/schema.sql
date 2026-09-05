@@ -157,7 +157,7 @@
       v_id  := (v_el->>'itemId')::bigint;
       v_qty := coalesce((v_el->>'qty')::int, 0);
       if v_qty < 1 or v_qty > 10 then
-        raise exception 'Contanct The volunteers for hight quantities';
+        raise exception 'Contanct The volunteers for high quantities';
       end if;
       select * into v_item from items where id = v_id for update;
       if not found then raise exception 'Something in your cart was just removed'; end if;
@@ -557,6 +557,34 @@
     return v_ver;
   end $$;
 
+  -- ---------- section passwords (Boys / Girls) ----------
+  create or replace function verify_section_password(p_section text, p_password text) returns boolean
+  language plpgsql security definer set search_path = public, extensions as $$
+  declare v_hash text; v_key text;
+  begin
+    if p_section not in ('boys','girls') then raise exception 'Invalid section'; end if;
+    v_key := p_section || '_pass_hash';
+    select value into v_hash from app_settings where key = v_key;
+    if v_hash is null or crypt(p_password, v_hash) <> v_hash then
+      raise exception 'Wrong password for %', initcap(p_section);
+    end if;
+    return true;
+  end $$;
+
+  create or replace function admin_set_section_password(p_token text, p_section text, p_new_password text) returns void
+  language plpgsql security definer set search_path = public, extensions as $$
+  declare v_key text;
+  begin
+    perform admin_verify(p_token);
+    if p_section not in ('boys','girls') then raise exception 'Invalid section'; end if;
+    if length(coalesce(p_new_password,'')) < 3 then raise exception 'Password must be at least 3 characters'; end if;
+    v_key := p_section || '_pass_hash';
+    update app_settings set value = crypt(p_new_password, gen_salt('bf')) where key = v_key;
+    if not found then
+      insert into app_settings (key, value) values (v_key, crypt(p_new_password, gen_salt('bf')));
+    end if;
+  end $$;
+
   -- ============================================================
   --  ADMIN: username change + gate password management
   -- ============================================================
@@ -590,11 +618,37 @@
       raise exception 'Gate password must be at least 4 characters';
     end if;
     update app_settings set value = crypt(p_new_password, gen_salt('bf'))
-    where key = 'gate_pass_hash';
+     where key = 'gate_pass_hash';
     update app_settings set value = ((value::int) + 1)::text where key = 'gate_version';
     select value::int into v_ver from app_settings where key = 'gate_version';
     return v_ver;
   end $$;
+
+  create or replace function admin_start_public_offer(p_token text) returns jsonb
+  language plpgsql security definer set search_path = public, extensions as $$
+  begin
+    perform admin_verify(p_token);
+    update app_settings set value='1' where key='public_offer_active';
+    update app_settings set value='3' where key='public_offer_remaining';
+    return jsonb_build_object('active', true, 'remaining', 3);
+  end $$;
+
+  create or replace function admin_offer_status(p_token text) returns jsonb
+  language plpgsql security definer set search_path = public, extensions as $$
+  declare v_active text; v_remaining int; v_logs jsonb;
+  begin
+    perform admin_verify(p_token);
+    select value into v_active from app_settings where key='public_offer_active';
+    select value::int into v_remaining from app_settings where key='public_offer_remaining';
+    select coalesce(jsonb_agg(jsonb_build_object('code', code, 'customerName', customer_name, 'customerClass', customer_class, 'customerSection', customer_section, 'eventName', event_name, 'originalTotal', original_total, 'discountPercent', discount_percent, 'discountAmount', discount_amount, 'total', total, 'createdAt', created_at) order by id desc), '[]')
+    into v_logs from public_orders where is_discounted = true;
+    return jsonb_build_object('active', v_active='1', 'remaining', coalesce(v_remaining,0), 'discountedOrders', coalesce(v_logs, '[]'::jsonb));
+  end $$;
+
+  create or replace function public_offer_public_status() returns jsonb
+  language sql stable security definer set search_path = public, extensions as $$
+    select jsonb_build_object('active', coalesce((select value='1' from app_settings where key='public_offer_active'), false))
+  $$;
 
   -- ============================================================
   --  BACKUPS / RESET (company data lifecycle)

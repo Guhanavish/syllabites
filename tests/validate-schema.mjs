@@ -92,7 +92,7 @@ for (const file of routeFiles(routesDir)) {
     routeCalls++
     const name = m[1].toLowerCase()
     const args = (m[2].match(/\bp_\w+/g) || [])
-    if (!fnDefs[name]) { bad(false, `${file}: rpc ${name} NOT DEFINED in schema`); continue }
+    if (!fnDefs[name]) { ok(false, `${file}: rpc ${name} NOT DEFINED in schema`); continue }
     const defParams = [...fnDefs[name]]
     const missing = args.filter((a) => !fnDefs[name].has(a))
     const unused = defParams.filter((a) => !args.includes(a))
