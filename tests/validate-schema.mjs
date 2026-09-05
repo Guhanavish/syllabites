@@ -176,6 +176,17 @@ ok(/original_total/i.test(sql) && /is_discounted/i.test(sql), 'public_orders has
   ok(/parcelRevenue/i.test(statsFn) && /parcelOrders/i.test(statsFn), 'admin_stats exposes parcel revenue/orders separately')
 }
 ok(!/coalesce\s*\(\s*nullif\s*\(\s*btrim/i.test(sql.slice(sql.lastIndexOf('PARCEL MENU SEPARATION'))), 'new parcel code avoids nested coalesce(nullif(btrim())) pitfall')
+ok(/Price too high/i.test(sql), 'save functions reject over-limit prices with a friendly message')
+{
+  const idx = sql.toLowerCase().lastIndexOf('create or replace function restore_payload')
+  const body = sql.slice(idx, idx + 6000)
+  ok(body.indexOf('Cannot import') !== -1 && body.indexOf('Cannot import') < body.indexOf('wipe_live_data'),
+    'restore validates menu prices BEFORE wiping (bad backup never destroys live data)')
+}
+{
+  const menu = fs.readFileSync('G:/Foodcourt/web/src/app/admin/menu.tsx', 'utf8')
+  ok(menu.includes('it.price / 100'), 'admin toggle converts paise back to rupees (no 100x inflation)')
+}
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

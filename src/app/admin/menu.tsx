@@ -48,7 +48,9 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
 
   async function toggle(it: MenuItem) {
     try {
-      await api(saveEndpoint, { method: 'POST', body: { ...it, available: !it.available } })
+      // it.price is in paise; the save endpoint expects rupees — convert back
+      // or every toggle would inflate the price 100x and trip the price check
+      await api(saveEndpoint, { method: 'POST', body: { ...it, price: it.price / 100, available: !it.available } })
       setItems(items.map((x) => (x.id === it.id ? { ...x, available: !x.available } : x)))
       toast(!it.available ? `"${it.name}" hidden from menu` : `"${it.name}" is live again`, 'ok')
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }

@@ -384,6 +384,7 @@
 
     if length(v_name) < 1 or length(v_name) > 60 then raise exception 'Item name is required'; end if;
     if v_price <= 0 then raise exception 'Enter a valid price in ₹'; end if;
+    if v_price > 100000000 then raise exception 'Price too high (max ₹10,00,000)'; end if;
     if v_stock < 0 or v_stock > 100000 then raise exception 'Stock must be between 0 and 100000'; end if;
     if length(v_cat) > 30 then raise exception 'Category is too long'; end if;
 
@@ -1298,6 +1299,7 @@ begin
 
   if length(v_name) < 1 or length(v_name) > 60 then raise exception 'Item name is required'; end if;
   if v_price <= 0 then raise exception 'Enter a valid price in ₹'; end if;
+  if v_price > 100000000 then raise exception 'Price too high (max ₹10,00,000)'; end if;
   if v_stock < 0 or v_stock > 100000 then raise exception 'Stock must be between 0 and 100000'; end if;
   if length(v_cat) > 30 then raise exception 'Category is too long'; end if;
 
@@ -1379,7 +1381,36 @@ $$;
 
 create or replace function restore_payload(p_payload jsonb) returns void
 language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_el jsonb;
+  v_nm text;
+  v_pr numeric;
 begin
+  -- validate both menus BEFORE wiping: a bad backup must fail here with a
+  -- friendly message, never halfway through with live data already gone
+  for v_el in select * from jsonb_array_elements(coalesce(p_payload->'items', '[]'::jsonb)) loop
+    v_nm := coalesce(v_el->>'name', '');
+    begin
+      v_pr := (v_el->>'price')::numeric;
+    exception when others then
+      raise exception 'Cannot import: staff item "%" has a bad price — fix it and try again', v_nm;
+    end;
+    if v_pr is null or v_pr <= 0 or v_pr > 100000000 then
+      raise exception 'Cannot import: staff item "%" has invalid price — price must be between 1 and 100000000 paise', v_nm;
+    end if;
+  end loop;
+  for v_el in select * from jsonb_array_elements(coalesce(p_payload->'parcelItems', p_payload->'parcel_items', '[]'::jsonb)) loop
+    v_nm := coalesce(v_el->>'name', '');
+    begin
+      v_pr := (v_el->>'price')::numeric;
+    exception when others then
+      raise exception 'Cannot import: parcel item "%" has a bad price — fix it and try again', v_nm;
+    end;
+    if v_pr is null or v_pr <= 0 or v_pr > 100000000 then
+      raise exception 'Cannot import: parcel item "%" has invalid price — price must be between 1 and 100000000 paise', v_nm;
+    end if;
+  end loop;
+
   perform wipe_live_data();
 
   insert into items (id, name, emoji, category, price, stock, available, created_at, updated_at)
@@ -1388,8 +1419,8 @@ begin
         x->>'name',
         coalesce(x->>'emoji', '🍽️'),
         coalesce(x->>'category', 'Snacks'),
-        (x->>'price')::bigint,
-        (x->>'stock')::int,
+        (x->>'price')::numeric::bigint,
+        (x->>'stock')::numeric::int,
         coalesce((x->>'available')::boolean, true),
         coalesce((x->>'created_at')::timestamptz, now()),
         coalesce((x->>'updated_at')::timestamptz, now())
@@ -1401,8 +1432,8 @@ begin
         x->>'name',
         coalesce(x->>'emoji', '🍽️'),
         coalesce(x->>'category', 'Snacks'),
-        (x->>'price')::bigint,
-        (x->>'stock')::int,
+        (x->>'price')::numeric::bigint,
+        (x->>'stock')::numeric::int,
         coalesce((x->>'available')::boolean, true),
         coalesce((x->>'created_at')::timestamptz, now()),
         coalesce((x->>'updated_at')::timestamptz, now())

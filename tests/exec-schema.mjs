@@ -155,6 +155,32 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   const stats2 = await db.exec(`select admin_stats('${token}', 'today') as s`)
   const st2 = toJ(stats2[0].rows[0].s)
   ok(typeof st2.parcelRevenue === 'number' && typeof st2.parcelOrders === 'number', 'stats expose parcelRevenue/parcelOrders')
+
+  // over-limit price gets a friendly error, not a raw check-constraint violation
+  const tooHigh = await db.exec(
+    `select admin_save_parcel_item('${token}', '{"name":"Too Rich","price":2000000,"stock":1}'::jsonb) as it`
+  ).catch((e) => e)
+  ok(tooHigh instanceof Error && /Price too high/.test(tooHigh.message), 'parcel save rejects ₹20L with friendly message')
+
+  // bad backup fails BEFORE wiping — live data must survive
+  const liveBefore = (await db.exec(`select count(*) as c from parcel_items`))[0].rows[0].c
+  const badPayload = JSON.stringify({
+    items: [], parcelItems: [{ name: 'Bad Parcel', price: 0, stock: 1 }],
+    orders: [], orderItems: [], publicOrders: [], publicOrderItems: [],
+  })
+  const badRestore = await db.exec(`select restore_payload('${badPayload}'::jsonb)`).catch((e) => e)
+  ok(badRestore instanceof Error && /Cannot import/.test(badRestore.message), 'restore with price 0 fails friendly')
+  const liveAfter = (await db.exec(`select count(*) as c from parcel_items`))[0].rows[0].c
+  ok(String(liveAfter) === String(liveBefore) && Number(liveBefore) > 0, 'live parcel data survives failed restore')
+
+  // float-ish prices in a payload still import (tolerant cast)
+  const floatPayload = JSON.stringify({
+    items: [], parcelItems: [{ id: 999, name: 'Float Item', emoji: '🍽️', category: 'Snacks', price: '4999.0', stock: '5', available: true }],
+    orders: [], orderItems: [], publicOrders: [], publicOrderItems: [],
+  })
+  await db.exec(`select restore_payload('${floatPayload}'::jsonb)`)
+  const floatRow = (await db.exec(`select price, stock from parcel_items where name = 'Float Item'`))[0].rows[0]
+  ok(Number(floatRow.price) === 4999 && Number(floatRow.stock) === 5, 'float-ish payload prices import cleanly')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)
