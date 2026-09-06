@@ -15,16 +15,39 @@ type Board = {
   doneOrders: Order[]
 }
 
+/* Entrance (parcel) orders — price-blind for staff: code + customer + items only */
+type ParcelLine = { name: string; emoji: string | null; qty: number }
+type ParcelOrder = {
+  id: number
+  code: string
+  status: string
+  createdAt: string
+  customerName: string
+  customerClass: string
+  customerSection: string
+  eventName: string
+  items: ParcelLine[]
+}
+type ParcelBoard = {
+  active: ParcelOrder[]
+  doneToday: { count: number }
+  doneOrders: ParcelOrder[]
+}
+
 export default function ReceiverPage() {
   const router = useRouter()
   const [section, setSection] = useState<'boys' | 'girls' | null>(null)
-  const [tab, setTab] = useState<'new' | 'done'>('new')
+  const [tab, setTab] = useState<'new' | 'parcel' | 'done'>('new')
   const [board, setBoard] = useState<Board>({ active: [], doneToday: { count: 0, revenue: 0 }, doneOrders: [] })
+  const [parcel, setParcel] = useState<ParcelBoard>({ active: [], doneToday: { count: 0 }, doneOrders: [] })
   const [soundOn, setSoundOn] = useState(true)
   const [error, setError] = useState('')
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
+  const [pendingParcel, setPendingParcel] = useState<Set<number>>(new Set())
   const seenIds = useRef<Set<number>>(new Set())
+  const seenParcel = useRef<Set<number>>(new Set())
   const firstLoad = useRef(true)
+  const firstParcelLoad = useRef(true)
 
   /* ---------- session guard ---------- */
   useEffect(() => {
@@ -63,15 +86,37 @@ export default function ReceiverPage() {
     return () => { hb(); clearInterval(p) }
   }, [section, load])
 
+  /* ---------- parcel loader (entrance orders, price-blind) ---------- */
+  const loadParcel = useCallback(async (isNewEvent = false) => {
+    try {
+      const b = await api<ParcelBoard>('/api/parcel/board')
+      const fresh = b.active.filter((o) => o.status === 'placed' && !seenParcel.current.has(o.id))
+      setParcel(b)
+      b.active.forEach((o) => seenParcel.current.add(o.id))
+      if (!firstParcelLoad.current && fresh.length && (isNewEvent || soundOn)) {
+        chime(); buzz([60, 80, 60])
+        toast(`📦 New parcel order ${fresh[0].code}!`, '', 3200)
+      }
+      firstParcelLoad.current = false
+    } catch {}
+  }, [soundOn])
+
+  useEffect(() => {
+    loadParcel()
+    const t = setInterval(() => loadParcel(), 10000)
+    return () => clearInterval(t)
+  }, [loadParcel])
+
   /* ---------- realtime ---------- */
   useEffect(() => {
     if (!section) return
     const ch = sb()
       .channel('counter-' + Math.random())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load(true))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'public_orders' }, () => loadParcel(true))
       .subscribe()
     return () => { sb().removeChannel(ch) }
-  }, [section, load])
+  }, [section, load, loadParcel])
 
   async function serve(o: Order) {
     if (pendingIds.has(o.id)) return
@@ -110,6 +155,43 @@ export default function ReceiverPage() {
     } catch (e: any) { toast(e.message, 'bad'); load() }
   }
 
+  /* ---------- parcel actions (shared queue — both counters see it) ---------- */
+  async function serveParcel(o: ParcelOrder) {
+    if (pendingParcel.has(o.id)) return
+    // optimistic: remove card instantly and block double-taps
+    setParcel((prev) => ({ ...prev, active: prev.active.filter((x) => x.id !== o.id) }))
+    setPendingParcel((prev) => new Set(prev).add(o.id))
+    try {
+      const res: any = await api('/api/parcel/serve', { method: 'POST', body: { id: o.id, status: 'completed' } })
+      buzz(15)
+      if (res?.alreadyCompleted) {
+        toast(`Parcel ${o.code} was already served by another counter`, '')
+      } else {
+        toast(`Parcel ${o.code} served ✓`, 'ok')
+      }
+      loadParcel()
+    } catch (e: any) {
+      toast(e.message, 'bad')
+      loadParcel()
+    } finally {
+      setPendingParcel((prev) => {
+        const next = new Set(prev)
+        next.delete(o.id)
+        return next
+      })
+    }
+  }
+
+  async function cancelParcel(o: ParcelOrder) {
+    const ok = await confirmBox({ title: `Cancel parcel ${o.code}?`, msg: 'Stock will be returned to the parcel menu.', yes: 'Cancel order' })
+    if (!ok) return
+    try {
+      await api('/api/parcel/serve', { method: 'POST', body: { id: o.id, status: 'cancelled' } })
+      toast('Parcel cancelled · stock restored', 'ok')
+      loadParcel()
+    } catch (e: any) { toast(e.message, 'bad'); loadParcel() }
+  }
+
   function toggleSound() {
     const v = !soundOn
     setSoundOn(v)
@@ -128,12 +210,19 @@ export default function ReceiverPage() {
 
   const [search, setSearch] = useState('')
   const waiting = board.active.length
+  const parcelWaiting = parcel.active.length
   const rawList = tab === 'new' ? board.active : board.doneOrders
   // Seamless order-number search (filters locally, no extra fetch, debounced via deferred value)
   const list = rawList.filter((o) => {
     if (!search.trim()) return true
     const q = search.trim().toLowerCase()
     return String(o.id).includes(q) || String((o as any).tokenNo ?? (o as any).token_no ?? '').toLowerCase().includes(q) || ordNo(o).toLowerCase().includes(q)
+  })
+  const parcelRaw = tab === 'parcel' ? parcel.active : []
+  const parcelList = parcelRaw.filter((o) => {
+    if (!search.trim()) return true
+    const q = search.trim().toLowerCase()
+    return `${o.code} ${o.customerName} ${o.customerClass} ${o.customerSection} ${o.eventName}`.toLowerCase().includes(q)
   })
 
   if (!section) return <div className="root" />
@@ -161,6 +250,9 @@ export default function ReceiverPage() {
           <button className={`rt${tab === 'new' ? ' on' : ''}`} onClick={() => setTab('new')}>
             Waiting <span className="cnt">{waiting}</span>
           </button>
+          <button className={`rt${tab === 'parcel' ? ' on' : ''}`} onClick={() => setTab('parcel')}>
+            📦 Parcel <span className="cnt">{parcelWaiting}</span>
+          </button>
           <button className={`rt${tab === 'done' ? ' on' : ''}`} onClick={() => setTab('done')}>
             Served today <span className="cnt">{board.doneToday.count}</span>
           </button>
@@ -168,11 +260,51 @@ export default function ReceiverPage() {
 
         <div className="search-wrap" style={{ marginTop: 4 }}>
           <span className="s-ico">🔎</span>
-          <input type="text" placeholder="Search order number (e.g. B-12)…" value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
+          <input type="text" placeholder={tab === 'parcel' ? 'Search code, name, event…' : 'Search order number (e.g. B-12)…'} value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
         </div>
         <div style={{ height: 12 }} />
         <div className="board-list">
-          {error && !list.length ? (
+          {tab === 'parcel' ? (
+            parcelList.length === 0 ? (
+              <div className="empty"><span className="e-ico">📦</span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
+            ) : (
+              parcelList.map((o) => (
+                <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
+                  <div className="order-head">
+                    <div className="token-chip">
+                      <span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span>
+                    </div>
+                    <div className="order-title">
+                      <span className={`badge-pill ${statusCls(o.status)}`}>{statusPill(o.status)}</span>
+                      <div className="order-time" style={{ marginTop: 3 }}>
+                        {timeAgo(o.createdAt)} · {clockTime(o.createdAt)}
+                      </div>
+                    </div>
+                    <span className="badge-pill" style={{ background: 'var(--bg-soft)', color: 'var(--ink)' }}>📦</span>
+                  </div>
+                  <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: '8px 12px', marginTop: 10, fontSize: 12, fontWeight: 600 }}>
+                    {o.customerName} · {o.customerClass} · {o.customerSection} · {o.eventName}
+                  </div>
+                  <div className="order-items">
+                    {o.items.map((li, ix) => (
+                      <div key={ix} className="oi-line">
+                        <span className="oi-qty">{li.qty}×</span>
+                        <span>{li.emoji || ''} {li.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {o.status === 'placed' && (
+                    <div className="order-actions">
+                      <button className="btn ok" disabled={pendingParcel.has(o.id)} onClick={() => serveParcel(o)}>
+                        {pendingParcel.has(o.id) ? 'Serving…' : '✓ Served · handed over'}
+                      </button>
+                      <button className="btn sm soft-bad" style={{ flex: '0 0 auto', padding: '0 16px' }} onClick={() => cancelParcel(o)}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )
+          ) : error && !list.length ? (
             <div className="empty"><span className="e-ico">📡</span><h3>Connection issue</h3><p>{error}</p></div>
           ) : list.length === 0 ? (
             tab === 'new' ? (

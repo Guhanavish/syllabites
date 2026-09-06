@@ -1637,3 +1637,83 @@ end $$;
 insert into parcel_items (name, emoji, category, price, stock, available)
 select name, emoji, category, price, stock, available from items
 where not exists (select 1 from parcel_items);
+
+-- ============================================================
+--  STAFF PARCEL BOARD (counter staff serve entrance orders)
+--  Price-blind: staff see codes + customer + items only.
+--  Totals, item prices and discounts stay admin-only.
+--  Optimistic concurrency: two counters can't double-serve
+--  the same parcel order — the loser gets alreadyCompleted.
+-- ============================================================
+create or replace function staff_public_order(p_order_id bigint) returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select to_jsonb(t) from (
+    select o.id, o.code, o.status, o.created_at as "createdAt",
+      o.customer_name as "customerName", o.customer_class as "customerClass",
+      o.customer_section as "customerSection", o.event_name as "eventName",
+      (select coalesce(jsonb_agg(jsonb_build_object('name', oi.name, 'emoji', oi.emoji, 'qty', oi.qty) order by oi.id), '[]')
+       from public_order_items oi where oi.order_id = o.id) as items
+    from public_orders o where o.id = p_order_id
+  ) t
+$$;
+
+create or replace function staff_parcel_board() returns jsonb
+language plpgsql stable security definer set search_path = public, extensions as $$
+declare
+  v_active jsonb;
+  v_done jsonb;
+  v_count int;
+begin
+  select coalesce(jsonb_agg(staff_public_order(o.id) order by o.id), '[]')
+    into v_active
+  from public_orders o
+  where o.status = 'placed';
+
+  select count(*)::int into v_count
+  from public_orders o
+  where o.created_day = istoday() and o.status in ('completed', 'cancelled');
+
+  select coalesce(jsonb_agg(staff_public_order(o.id) order by o.id desc), '[]')
+    into v_done
+  from (
+    select id from public_orders
+    where created_day = istoday() and status in ('completed', 'cancelled')
+    order by id desc limit 20
+  ) s
+  join public_orders o on o.id = s.id;
+
+  return jsonb_build_object(
+    'active', v_active,
+    'doneToday', jsonb_build_object('count', v_count),
+    'doneOrders', v_done
+  );
+end $$;
+
+create or replace function staff_serve_public_order(p_order_id bigint, p_status text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_cur text;
+  v_result jsonb;
+begin
+  if p_status not in ('completed', 'cancelled') then raise exception 'Unknown status'; end if;
+  select status into v_cur from public_orders where id = p_order_id for update;
+  if not found then raise exception 'Order not found'; end if;
+
+  if v_cur <> 'placed' then
+    v_result := staff_public_order(p_order_id);
+    return jsonb_set(v_result, '{alreadyCompleted}', 'true'::jsonb);
+  end if;
+
+  update public_orders
+    set status = p_status, updated_at = now()
+  where id = p_order_id;
+
+  if p_status = 'cancelled' then
+    update parcel_items i
+      set stock = i.stock + oi.qty, updated_at = now()
+      from public_order_items oi
+    where oi.order_id = p_order_id and oi.item_id = i.id;
+  end if;
+
+  return staff_public_order(p_order_id);
+end $$;

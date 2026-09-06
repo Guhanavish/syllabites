@@ -181,6 +181,40 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   await db.exec(`select restore_payload('${floatPayload}'::jsonb)`)
   const floatRow = (await db.exec(`select price, stock from parcel_items where name = 'Float Item'`))[0].rows[0]
   ok(Number(floatRow.price) === 4999 && Number(floatRow.stock) === 5, 'float-ish payload prices import cleanly')
+
+  // staff parcel board: visible to counters, blind to money
+  const staffItem = await db.exec(
+    `select admin_save_parcel_item('${token}', '{"name":"Staff View Samosa","emoji":"🥟","category":"Snacks","price":20,"stock":10,"available":true}'::jsonb) as it`
+  )
+  const staffParcelId = toJ(staffItem[0].rows[0].it).id
+  const staffOrder = await db.exec(
+    `select public_place_order('[{"itemId":${staffParcelId},"qty":1}]'::jsonb, 'Counter Test', '9-B', 'B', 'Annual Day') as o`
+  )
+  const so = toJ(staffOrder[0].rows[0].o)
+  const sboard = await db.exec(`select staff_parcel_board() as b`)
+  const sb2 = toJ(sboard[0].rows[0].b)
+  const seen = sb2.active.find((o) => o.id === so.id)
+  ok(!!seen && seen.code === so.code && seen.customerName === 'Counter Test', 'staff board shows entrance order with code + customer')
+  ok(!/\"(total|price|lineTotal|discount)\"/i.test(JSON.stringify(seen)), 'staff parcel view leaks no money fields')
+  ok(Array.isArray(seen.items) && seen.items[0].qty === 1 && !('lineTotal' in seen.items[0]), 'staff sees item qty, not amounts')
+
+  // double-serve is safe: loser gets alreadyCompleted
+  const served1 = toJ((await db.exec(`select staff_serve_public_order(${so.id}, 'completed') as o`))[0].rows[0].o)
+  ok(served1.status === 'completed', 'staff can serve parcel order')
+  const served2 = toJ((await db.exec(`select staff_serve_public_order(${so.id}, 'completed') as o`))[0].rows[0].o)
+  ok(served2.alreadyCompleted === true, 'second serve reports alreadyCompleted')
+
+  // staff cancel restores parcel stock (not staff stock)
+  const cancelItem = await db.exec(
+    `select admin_save_parcel_item('${token}', '{"name":"Cancel Restore","price":10,"stock":5,"available":true}'::jsonb) as it`
+  )
+  const cancelId = toJ(cancelItem[0].rows[0].it).id
+  const cancelOrder = toJ((await db.exec(
+    `select public_place_order('[{"itemId":${cancelId},"qty":2}]'::jsonb, 'Cancel Me', '8-A', 'A', 'Sports') as o`
+  ))[0].rows[0].o)
+  await db.exec(`select staff_serve_public_order(${cancelOrder.id}, 'cancelled') as o`)
+  const cancelStock = (await db.exec(`select stock from parcel_items where id = ${cancelId}`))[0].rows[0].stock
+  ok(cancelStock === 5, 'staff cancel restores parcel stock')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

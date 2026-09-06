@@ -193,5 +193,14 @@ ok(/wipe_live_data_retry\(\)/.test(sql), 'wipe retry helper exists')
 ok(/statement_timeout\s*=\s*'120s'/.test(sql), 'maintenance RPCs get a timeout budget past the platform default')
 ok(/pg_sleep\(0\.5 \* v_try\)/.test(sql), 'wipe retries with backoff on lock contention')
 
+console.log('— staff parcel board (price-blind) —')
+ok(/staff_parcel_board/i.test(sql), 'staff_parcel_board RPC exists')
+ok(/staff_serve_public_order/i.test(sql), 'staff_serve_public_order RPC exists')
+{
+  const idx = sql.toLowerCase().lastIndexOf('create or replace function staff_public_order')
+  const body = sql.slice(idx, idx + 2000).replace(/staff_public_order/g, '')
+  ok(!/total|price|discount/i.test(body), 'staff parcel view exposes no money fields (admin-only pricing intact)')
+}
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
