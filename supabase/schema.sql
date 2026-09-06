@@ -680,6 +680,10 @@
     v_label text;
   begin
     perform admin_verify(p_token);
+    -- snapshots scan whole order history; give them room past the short
+    -- platform statement timeout, and fail fast on lock waits (retried by caller)
+    set local statement_timeout = '120s';
+    set local lock_timeout = '5s';
     v_label := nullif(btrim(p_label, ''), '');
   if v_label is null then
       v_label := 'Manual backup';
@@ -772,6 +776,8 @@
     v_safety_id bigint;
   begin
     perform admin_verify(p_token);
+    set local statement_timeout = '120s';
+    set local lock_timeout = '5s';
 
     select payload into v_payload from backups where id = p_backup_id;
     if not found then raise exception 'Backup not found'; end if;
@@ -799,18 +805,22 @@
     v_label text;
   begin
     perform admin_verify(p_token);
+    set local statement_timeout = '120s';
+    set local lock_timeout = '5s';
 
     -- everything that exists right now is preserved on the server first
     v_label := nullif(btrim(p_label, ''), '');
     if v_label is null then
       v_label := 'Fresh start';
     end if;
+    -- snapshot once and reuse it (the scan is the slowest part)
+    v_counts := backup_payload();
     insert into backups (label, payload)
-    values (v_label, backup_payload())
+    values (v_label, v_counts)
     returning id into v_backup_id;
 
-    v_counts := backup_payload();
-    perform wipe_live_data();
+    -- TRUNCATE needs exclusive locks while phones poll constantly: retry it
+    perform wipe_live_data_retry();
 
     return jsonb_build_object(
       'backupId', v_backup_id,
@@ -1379,6 +1389,27 @@ language sql security definer set search_path = public, extensions as $$
   truncate table order_items, orders, items, public_order_items, public_orders, parcel_items restart identity cascade;
 $$;
 
+-- TRUNCATE needs exclusive locks while sender/receiver/admin phones poll
+-- every few seconds, so a single attempt often loses the race and hits the
+-- statement timeout. Retrying with backoff turns the manual "try again"
+-- loop into an automatic one.
+create or replace function wipe_live_data_retry() returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_try int := 1;
+begin
+  loop
+    begin
+      perform wipe_live_data();
+      exit;
+    exception when query_canceled or deadlock_detected or lock_not_available then
+      if v_try >= 6 then raise; end if;
+      perform pg_sleep(0.5 * v_try);
+      v_try := v_try + 1;
+    end;
+  end loop;
+end $$;
+
 create or replace function restore_payload(p_payload jsonb) returns void
 language plpgsql security definer set search_path = public, extensions as $$
 declare
@@ -1386,6 +1417,8 @@ declare
   v_nm text;
   v_pr numeric;
 begin
+  set local statement_timeout = '120s';
+  set local lock_timeout = '5s';
   -- validate both menus BEFORE wiping: a bad backup must fail here with a
   -- friendly message, never halfway through with live data already gone
   for v_el in select * from jsonb_array_elements(coalesce(p_payload->'items', '[]'::jsonb)) loop
@@ -1411,7 +1444,7 @@ begin
     end if;
   end loop;
 
-  perform wipe_live_data();
+  perform wipe_live_data_retry();
 
   insert into items (id, name, emoji, category, price, stock, available, created_at, updated_at)
   overriding system value

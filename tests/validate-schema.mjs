@@ -188,5 +188,10 @@ ok(/Price too high/i.test(sql), 'save functions reject over-limit prices with a 
   ok(menu.includes('it.price / 100'), 'admin toggle converts paise back to rupees (no 100x inflation)')
 }
 
+console.log('— maintenance under live traffic —')
+ok(/wipe_live_data_retry\(\)/.test(sql), 'wipe retry helper exists')
+ok(/statement_timeout\s*=\s*'120s'/.test(sql), 'maintenance RPCs get a timeout budget past the platform default')
+ok(/pg_sleep\(0\.5 \* v_try\)/.test(sql), 'wipe retries with backoff on lock contention')
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
