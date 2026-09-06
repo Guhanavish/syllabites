@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { sb } from '@/lib/supabase'
+import { db, fetchMenu } from '@/lib/db'
 import { inr } from '@/lib/fmt'
 import { toast, buzz, chime } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
@@ -25,8 +25,7 @@ export function PublicOrder() {
   const loadMenu = useCallback(async () => {
     try {
       // Parcel menu is separate storage (parcel_items) — staff items never leak here
-      const { data } = await sb().from('parcel_items').select('*').order('id')
-      const list = (data || []) as any[]
+      const list = await fetchMenu('parcel_items')
       setItems(list)
       setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
     } catch {}
@@ -37,12 +36,12 @@ export function PublicOrder() {
 
   // realtime primary for parcel menu; polling above is the fallback
   useEffect(() => {
-    const ch = sb()
+    const ch = db()
       .channel('parcel-menu-' + Math.random())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'parcel_items' }, () => loadMenu())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'public_orders' }, () => loadMenu())
       .subscribe()
-    return () => { sb().removeChannel(ch) }
+    return () => { db().removeChannel(ch) }
   }, [loadMenu])
 
   function addToCart(id: number, delta: number) {

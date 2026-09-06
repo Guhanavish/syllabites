@@ -16,9 +16,17 @@ export const viewport: Viewport = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  let sbOrigin = ''
+  try { sbOrigin = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || '').origin } catch {}
   return (
     <html lang="en">
       <body>
+        {sbOrigin ? (
+          <>
+            <link rel="preconnect" href={sbOrigin} crossOrigin="anonymous" />
+            <link rel="dns-prefetch" href={sbOrigin} />
+          </>
+        ) : null}
         <div className="phone" id="phone">
           <GateLock>
             {children}

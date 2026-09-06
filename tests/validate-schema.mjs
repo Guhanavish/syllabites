@@ -202,5 +202,21 @@ ok(/staff_serve_public_order/i.test(sql), 'staff_serve_public_order RPC exists')
   ok(!/total|price|discount/i.test(body), 'staff parcel view exposes no money fields (admin-only pricing intact)')
 }
 
+console.log('— cold-load budget (browser bundle) —')
+{
+  const browserFiles = []
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = dir + '/' + e.name
+      if (e.isDirectory()) { if (e.name !== 'api') walk(p); }
+      else if (/\.tsx?$/.test(e.name)) browserFiles.push(p)
+    }
+  }
+  walk('G:/Foodcourt/web/src/app')
+  browserFiles.push('G:/Foodcourt/web/src/components/PublicOrder.tsx', 'G:/Foodcourt/web/src/lib/gate.tsx', 'G:/Foodcourt/web/src/lib/db.ts')
+  const heavy = browserFiles.filter((f) => /(?:from|import\(|require\()\s*['"]@supabase\/supabase-js['"]/.test(fs.readFileSync(f, 'utf8')))
+  ok(heavy.length === 0, 'browser code never pulls the full supabase-js bundle (uses light lib/db)' + (heavy.length ? ' — OFFENDERS: ' + heavy.join(', ') : ''))
+}
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

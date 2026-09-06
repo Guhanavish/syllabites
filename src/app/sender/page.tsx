@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { sb } from '@/lib/supabase'
+import { db, fetchMenu } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { MenuItem, Order } from '@/lib/fmt'
@@ -45,9 +45,7 @@ export default function SenderPage() {
   /* ---------- data loaders ---------- */
   const loadMenu = useCallback(async () => {
     try {
-      const { data, error } = await sb().from('items').select('*').order('id')
-      if (error) throw error
-      const list: MenuItem[] = (data || []) as any[]
+      const list: MenuItem[] = await fetchMenu('items')
       setItems(list)
       setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
     } catch {}
@@ -90,12 +88,12 @@ export default function SenderPage() {
   /* ---------- realtime ---------- */
   useEffect(() => {
     if (!section) return
-    const ch = sb()
+    const ch = db()
       .channel('sender-' + Math.random())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadMine())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, () => loadMenu())
       .subscribe()
-    return () => { sb().removeChannel(ch) }
+    return () => { db().removeChannel(ch) }
   }, [section, loadMenu, loadMine])
 
   /* ---------- cart ops — max 30 per item for Boys/Girls counters ---------- */

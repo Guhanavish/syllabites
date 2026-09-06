@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/lib/client'
 import { toast } from '@/lib/ui'
+import { warmCritical } from '@/lib/db'
 import { PublicOrder } from '@/components/PublicOrder'
 
 type Mode = { kind: 'enter' } | { kind: 'reset' }
@@ -13,12 +14,14 @@ type Mode = { kind: 'enter' } | { kind: 'reset' }
  * locked out again automatically when the password changes.
  */
 export function GateLock({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<'checking' | 'locked' | 'open'>(() => {
-    // instant optimistic open from cache — avoids page-switch lag
+  const [state, setState] = useState<'locked' | 'open'>(() => {
+    // instant optimistic open from cache — avoids page-switch lag.
+    // With no cache the outcome is always the lock screen, so render it
+    // immediately instead of blank-screening on the gate-status round trip.
     try {
       if (typeof window !== 'undefined' && localStorage.getItem('fc.gate')) return 'open'
     } catch {}
-    return 'checking'
+    return 'locked'
   })
   const [mode, setMode] = useState<Mode>({ kind: 'enter' })
   const [gateTab, setGateTab] = useState<'welcome' | 'order' | 'staff'>('welcome')
@@ -41,7 +44,7 @@ export function GateLock({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  useEffect(() => { check() }, [check])
+  useEffect(() => { check(); warmCritical() }, [check])
 
   function unlock(version: number) {
     localStorage.setItem('fc.gate', JSON.stringify({ v: version }))
@@ -79,7 +82,6 @@ export function GateLock({ children }: { children: ReactNode }) {
   }
 
   if (state === 'open') return <>{children}</>
-  if (state === 'checking') return <div className="root" />
 
   const isReset = mode.kind === 'reset'
   if (gateTab === 'welcome' && !isReset) {

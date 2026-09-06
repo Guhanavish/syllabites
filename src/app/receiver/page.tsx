@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { sb } from '@/lib/supabase'
+import { db } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { Order } from '@/lib/fmt'
@@ -110,12 +110,12 @@ export default function ReceiverPage() {
   /* ---------- realtime ---------- */
   useEffect(() => {
     if (!section) return
-    const ch = sb()
+    const ch = db()
       .channel('counter-' + Math.random())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => load(true))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'public_orders' }, () => loadParcel(true))
       .subscribe()
-    return () => { sb().removeChannel(ch) }
+    return () => { db().removeChannel(ch) }
   }, [section, load, loadParcel])
 
   async function serve(o: Order) {
