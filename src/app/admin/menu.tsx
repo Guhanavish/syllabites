@@ -5,6 +5,7 @@ import { api } from '@/lib/client'
 import { inr } from '@/lib/fmt'
 import type { MenuItem } from '@/lib/fmt'
 import { toast, buzz, openSheet, closeSheet, confirmBox } from '@/lib/ui'
+import { IconSearch, IconPlus, IconTrash, IconEdit } from '@/components/icons'
 
 const EMOJIS = ['🍽️', '🍛', '🍜', '🍕', '🍔', '🍟', '🌮', '🥪', '🥟', '🍗', '🥗', '🍚', '🫓', '🥞', '🍩', '🍪', '🍰', '🍦', '🍫', '☕', '🧋', '🥤', '🍿', '🍤', '🍳', '🧆', '🌯', '🥐']
 
@@ -12,15 +13,16 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
   const [mode, setMode] = useState<'staff' | 'parcel'>('staff')
   const [items, setItems] = useState<MenuItem[]>([])
   const [q, setQ] = useState('')
+  const [loading, setLoading] = useState(true)
 
   const saveEndpoint = mode === 'staff' ? '/api/items/save' : '/api/parcel/items/save'
   const deleteEndpoint = mode === 'staff' ? '/api/items/delete' : '/api/parcel/items/delete'
 
   const load = useCallback(async () => {
-    try { setItems(await api<MenuItem[]>(mode === 'staff' ? '/api/items' : '/api/parcel/items')) } catch (e: any) { expired(e) }
+    try { setItems(await api<MenuItem[]>(mode === 'staff' ? '/api/items' : '/api/parcel/items')) } catch (e: any) { expired(e) } finally { setLoading(false) }
   }, [expired, mode])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { setLoading(true); load() }, [load])
   useEffect(() => {
     const p = setInterval(load, 15000)
     return () => clearInterval(p)
@@ -48,7 +50,7 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
 
   async function toggle(it: MenuItem) {
     try {
-      // it.price is in paise; the save endpoint expects rupees — convert back
+      // it.price is in paise; the save endpoint expects rupees, convert back
       // or every toggle would inflate the price 100x and trip the price check
       await api(saveEndpoint, { method: 'POST', body: { ...it, price: it.price / 100, available: !it.available } })
       setItems(items.map((x) => (x.id === it.id ? { ...x, available: !x.available } : x)))
@@ -101,15 +103,19 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
       )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <div className="search-wrap" style={{ flex: 1, margin: 0 }}>
-          <span className="s-ico">🔎</span>
+          <span className="s-ico"><IconSearch size={17} /></span>
           <input type="text" placeholder="Search items…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
-        <button className="btn btn-primary" style={{ flex: 'none' }} onClick={() => sheet(null)}>＋ Add</button>
+        <button className="btn btn-primary" style={{ flex: 'none' }} onClick={() => sheet(null)}><IconPlus size={17} /> Add</button>
       </div>
 
-      {!list.length ? (
+      {loading ? (
+        <>
+          <div className="skel skel-row" /><div className="skel skel-row" /><div className="skel skel-row" />
+        </>
+      ) : !list.length ? (
         <div className="empty">
-          <span className="e-ico">🍽️</span>
+          <span className="e-ico" role="img" aria-label="Plate">🍽️</span>
           <h3>No items yet</h3>
           <p>Add your first food item to open the counter.<br />Only you (admin) can add or change items.</p>
           <button className="btn btn-primary" onClick={() => sheet(null)}>＋ Add first item</button>
@@ -117,7 +123,7 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
       ) : (
         list.map((it) => (
           <div key={it.id} className="mgmt-row">
-            <div className="emoji-tile" style={{ width: 46, height: 46, fontSize: 23 }}>{it.emoji}</div>
+            <div className="emoji-tile" role="img" aria-label={it.name} style={{ width: 46, height: 46, fontSize: 23 }}>{it.emoji}</div>
             <div className="mgmt-info">
               <div className="mgmt-name">{it.name}</div>
               <div className="mgmt-meta">
@@ -130,8 +136,8 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
             </div>
             <div className="row-actions">
               <button className={`avail-switch${it.available ? ' on' : ''}`} onClick={() => toggle(it)} aria-label="Available" />
-              <button className="ra-btn" onClick={() => sheet(it)}>✏️</button>
-              <button className="ra-btn" onClick={() => del(it)}>🗑️</button>
+              <button className="ra-btn" onClick={() => sheet(it)} aria-label={`Edit ${it.name}`}><IconEdit size={16} /></button>
+              <button className="ra-btn" onClick={() => del(it)} aria-label={`Delete ${it.name}`}><IconTrash size={16} /></button>
             </div>
           </div>
         ))
@@ -166,6 +172,8 @@ function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
       stock: Number(fd.get('stock') || 0),
     }
     if (!payload.name) { setErr('Item name is required'); return }
+    if (!Number.isFinite(payload.price) || payload.price <= 0) { setErr('Price must be more than ₹0'); return }
+    if (!Number.isFinite(payload.stock) || payload.stock < 0) { setErr('Stock must be 0 or more'); return }
     setBusy(true)
     try {
       await api(saveEndpoint, { method: 'POST', body: payload })
@@ -195,6 +203,7 @@ function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
         <div className="field">
           <label>Item name</label>
           <input type="text" name="name" maxLength={60} placeholder="e.g. Veg Sandwich" defaultValue={item?.name || ''} autoFocus />
+          <div className="hint">Shown on the counter menu, max 60 characters.</div>
         </div>
         <div className="field">
           <label>Category</label>
@@ -209,11 +218,13 @@ function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
               <input type="number" name="price" min="1" step="0.5" inputMode="decimal" placeholder="49"
                 defaultValue={item ? item.price / 100 : ''} />
             </div>
+            <div className="hint">Must be more than ₹0.</div>
           </div>
           <div className="field" style={{ flex: 1 }}>
             <label>Stock qty</label>
             <input type="number" name="stock" min="0" step="1" inputMode="numeric" placeholder="20"
               defaultValue={item?.stock ?? ''} />
+            <div className="hint">0 hides ordering but keeps the item.</div>
           </div>
         </div>
         <div className="field" style={{

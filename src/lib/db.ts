@@ -5,11 +5,11 @@
  *
  * The full `@supabase/supabase-js` bundle (~231KB: realtime + auth + storage)
  * ships to every phone, but this app only ever uses realtime channels and
- * plain table reads — auth/storage are dead weight on a cold first load.
+ * plain table reads, auth/storage are dead weight on a cold first load.
  * This module talks to the same Supabase project with just
  * `@supabase/postgrest-js` + `@supabase/realtime-js`, which are already
  * installed as transitive dependencies. Same project, same tables, same
- * realtime events — only the unused code is gone.
+ * realtime events, only the unused code is gone.
  *
  * Server routes (`src/app/api/*`) keep using `@/lib/supabase` (supabase-js);
  * server bundle size never affects first paint.
@@ -20,7 +20,7 @@ import { RealtimeClient, type RealtimeChannel } from '@supabase/realtime-js'
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
 
-/** Only the columns any menu UI reads — narrower payloads, faster parse. */
+/** Only the columns any menu UI reads, narrower payloads, faster parse. */
 const MENU_COLS = 'id,name,emoji,category,price,stock,available'
 
 let pg: PostgrestClient | null = null
@@ -65,7 +65,7 @@ export function db(): BrowserDb {
 
 /* In-flight menu reads, shared across components so concurrent mounts
    (and the cold-start warm-up below) issue ONE request, not N. Promise is
-   dropped as soon as it settles — no stale data is ever served. */
+   dropped as soon as it settles, no stale data is ever served. */
 const inflight = new Map<string, Promise<any[]>>()
 
 export function fetchMenu(table: 'items' | 'parcel_items'): Promise<any[]> {
@@ -87,8 +87,8 @@ export function fetchMenu(table: 'items' | 'parcel_items'): Promise<any[]> {
 let warmed = false
 /**
  * Fired once on app mount, in parallel with the gate check: warms the
- * parcel menu (public, shown on the default Order tab) and — on returning
- * devices — the staff menu for the remembered section. Components reuse the
+ * parcel menu (public, shown on the default Order tab) and, on returning
+ * devices, the staff menu for the remembered section. Components reuse the
  * in-flight request, so by first tap the data is already here.
  */
 export function warmCritical(): void {

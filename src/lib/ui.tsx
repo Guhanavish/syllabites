@@ -105,8 +105,20 @@ export function chime() {
 }
 
 /* ---------- host component (mount once in layout) ---------- */
-export function UiHost() {
-  const t = useSyncExternalStore(subscribe, getToasts, getToasts)
+/** Reactive online flag so forms can disable submits while offline. */
+export function useOnline(): boolean {
+  const [online, setOnline] = useState(true)
+  useEffect(() => {
+    const up = () => setOnline(true)
+    const down = () => setOnline(false)
+    window.addEventListener('online', up)
+    window.addEventListener('offline', down)
+    setOnline(navigator.onLine)
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down) }
+  }, [])
+  return online
+}
+export function UiHost() {  const t = useSyncExternalStore(subscribe, getToasts, getToasts)
   const sh = useSyncExternalStore(subscribe, getSheet, getSheet)
   const cf = useSyncExternalStore(subscribe, getConfirm, getConfirm)
   const [online, setOnline] = useState(true)
@@ -143,7 +155,7 @@ export function UiHost() {
           </div>
         ))}
       </div>
-      {!online && <div className="offline-bar show">⟳ You are offline — reconnecting…</div>}
+      {!online && <div className="offline-bar show">⟳ You are offline, reconnecting…</div>}
     </>
   )
 }

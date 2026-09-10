@@ -10,12 +10,12 @@ type Mode = { kind: 'enter' } | { kind: 'reset' }
 
 /**
  * Blocks the entire app until the common access password is entered.
- * Unlocked devices remember the current gate version — everyone is
+ * Unlocked devices remember the current gate version, everyone is
  * locked out again automatically when the password changes.
  */
 export function GateLock({ children }: { children: ReactNode }) {
   const [state, setState] = useState<'locked' | 'open'>(() => {
-    // instant optimistic open from cache — avoids page-switch lag.
+    // instant optimistic open from cache, avoids page-switch lag.
     // With no cache the outcome is always the lock screen, so render it
     // immediately instead of blank-screening on the gate-status round trip.
     try {
@@ -55,7 +55,7 @@ export function GateLock({ children }: { children: ReactNode }) {
   async function submitEnter(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const pw = String(new FormData(e.currentTarget).get('pw') || '')
-    if (!pw) return
+    if (!pw) { setErr('Enter the access password to continue'); return }
     setBusy(true); setErr('')
     try {
       const r = await api<{ version: number }>('/api/gate/verify', { method: 'POST', body: { password: pw } })
@@ -94,7 +94,7 @@ export function GateLock({ children }: { children: ReactNode }) {
             <span className="float" style={{ top: 44, right: 120, animationDelay: '.7s' }}>🍚</span>
             <span className="logo" style={{ fontSize: 48 }}>🍽️</span>
             <h1 style={{ marginTop: 8 }}>Welcome</h1>
-            <p>The campus food court, reimagined — fresh orders, zero queue.</p>
+            <p>Order from your counter and pick up by number. No standing in line.</p>
           </div>
           <div style={{ padding: '6px 2px 0' }}>
             <h2 style={{ fontSize: 18, fontWeight: 900, textAlign: 'center' }}>Welcome to Syllabites</h2>
@@ -102,8 +102,8 @@ export function GateLock({ children }: { children: ReactNode }) {
               Choose how you&apos;d like to continue.
             </p>
             <div style={{ display: 'grid', gap: 12, marginTop: 18 }}>
-              <button className="btn btn-primary xl block" onClick={() => setGateTab('order')}>🍽️ Place Order</button>
-              <button className="btn btn-dark xl block" onClick={() => setGateTab('staff')}>🔒 Staff Environment</button>
+              <button className="btn btn-primary xl block" onClick={() => setGateTab('order')}>Place Order</button>
+              <button className="btn btn-dark xl block" onClick={() => setGateTab('staff')}>Staff Environment</button>
             </div>
           </div>
           <div style={{ textAlign: 'center', marginTop: 22 }}>
@@ -119,7 +119,7 @@ export function GateLock({ children }: { children: ReactNode }) {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" stroke="none"/></svg>
               </a>
             </div>
-            <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
+            <div style={{ marginTop: 10, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish, Class XI. Inspired by Harish C, Class XII.</div>
           </div>
         </div>
       </div>
@@ -129,8 +129,8 @@ export function GateLock({ children }: { children: ReactNode }) {
   return (
     <div className="root" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <div className="topbar" style={{ justifyContent: 'center', gap: 8 }}>
-        <button className={`chip ${gateTab === 'order' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('order'); setMode({ kind: 'enter' }); setErr('') }}>🍽️ Order Food</button>
-        <button className={`chip ${gateTab === 'staff' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('staff'); setMode({ kind: 'enter' }); setErr('') }}>🔒 Staff Access</button>
+        <button className={`chip ${gateTab === 'order' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('order'); setMode({ kind: 'enter' }); setErr('') }}>Order Food</button>
+        <button className={`chip ${gateTab === 'staff' && !isReset ? 'on' : ''}`} style={{ flex: 1, justifyContent: 'center', display: 'inline-flex', padding: '9px 10px' }} onClick={() => { setGateTab('staff'); setMode({ kind: 'enter' }); setErr('') }}>Staff Access</button>
       </div>
 
       {isReset ? (
@@ -147,7 +147,7 @@ export function GateLock({ children }: { children: ReactNode }) {
           <div style={{ textAlign: 'center', marginTop: 18 }}>
             <button className="admin-link" onClick={() => { setMode({ kind: 'enter' }); setErr('') }}>← Back</button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish, Class XI. Inspired by Harish C, Class XII.</div>
         </div>
       ) : gateTab === 'order' ? (
         <div className="scroll" style={{ paddingTop: 14 }}>
@@ -155,7 +155,7 @@ export function GateLock({ children }: { children: ReactNode }) {
             <button className="admin-link" onClick={() => setGateTab('welcome')}>← Back to Welcome</button>
           </div>
           <PublicOrder />
-          <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
+          <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish, Class XI. Inspired by Harish C, Class XII.</div>
         </div>
       ) : (
         <div className="login-wrap" style={{ flex: 1 }}>
@@ -164,13 +164,13 @@ export function GateLock({ children }: { children: ReactNode }) {
           <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, margin: '6px 0 22px' }}>Enter the access password to continue</p>
           <form onSubmit={submitEnter} noValidate>
             {err && <div className="form-error show">{err}</div>}
-            <div className="field"><label>Access password</label><input name="pw" type="password" autoComplete="current-password" placeholder="••••••••" autoFocus /></div>
+            <div className="field"><label>Access password</label><input name="pw" type="password" autoComplete="current-password" placeholder="••••••••" autoFocus /><div className="hint">Shared password for all counters. Ask a volunteer if you don&apos;t know it.</div></div>
             <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Unlock 🔓</button>
           </form>
           <div style={{ textAlign: 'center', marginTop: 18 }}>
             <button className="admin-link" onClick={() => { setMode({ kind: 'reset' }); setErr('') }}>Forgot password?</button>
           </div>
-          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish - XI , Inspired From Harish C - XII</div>
+          <div style={{ textAlign: 'center', marginTop: 22, fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '0.02em', opacity: 0.9 }}>Built by Guhanavish, Class XI. Inspired by Harish C, Class XII.</div>
         </div>
       )}
     </div>

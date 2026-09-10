@@ -8,6 +8,7 @@ import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt
 import type { Order } from '@/lib/fmt'
 import { toast, buzz, chime, confirmBox } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
+import { IconReceipt, IconBox, IconCheck, IconSearch, IconBell, IconBellOff, IconDoor } from '@/components/icons'
 
 type Board = {
   active: Order[]
@@ -15,7 +16,7 @@ type Board = {
   doneOrders: Order[]
 }
 
-/* Entrance (parcel) orders — price-blind for staff: code + customer + items only */
+/* Entrance (parcel) orders, price-blind for staff: code + customer + items only */
 type ParcelLine = { name: string; emoji: string | null; qty: number }
 type ParcelOrder = {
   id: number
@@ -42,6 +43,10 @@ export default function ReceiverPage() {
   const [parcel, setParcel] = useState<ParcelBoard>({ active: [], doneToday: { count: 0 }, doneOrders: [] })
   const [soundOn, setSoundOn] = useState(true)
   const [error, setError] = useState('')
+  const [loaded, setLoaded] = useState(false)
+  const [parcelLoaded, setParcelLoaded] = useState(false)
+  const [parcelError, setParcelError] = useState('')
+  const [doneVisible, setDoneVisible] = useState(10)
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set())
   const [pendingParcel, setPendingParcel] = useState<Set<number>>(new Set())
   const seenIds = useRef<Set<number>>(new Set())
@@ -72,9 +77,11 @@ export default function ReceiverPage() {
         toast(`🔥 New order ${ordNo(fresh[0])}!`, '', 3200)
       }
       firstLoad.current = false
+      setLoaded(true)
       setError('')
     } catch (e: any) {
       setError(e.message || 'Connection issue')
+      setLoaded(true)
     }
   }, [section, soundOn])
 
@@ -98,7 +105,12 @@ export default function ReceiverPage() {
         toast(`📦 New parcel order ${fresh[0].code}!`, '', 3200)
       }
       firstParcelLoad.current = false
-    } catch {}
+      setParcelLoaded(true)
+      setParcelError('')
+    } catch {
+      setParcelLoaded(true)
+      setParcelError("Can't reach the server. Check your internet connection.")
+    }
   }, [soundOn])
 
   useEffect(() => {
@@ -155,7 +167,7 @@ export default function ReceiverPage() {
     } catch (e: any) { toast(e.message, 'bad'); load() }
   }
 
-  /* ---------- parcel actions (shared queue — both counters see it) ---------- */
+  /* ---------- parcel actions (shared queue, both counters see it) ---------- */
   async function serveParcel(o: ParcelOrder) {
     if (pendingParcel.has(o.id)) return
     // optimistic: remove card instantly and block double-taps
@@ -235,8 +247,8 @@ export default function ReceiverPage() {
           <h1>{section === 'boys' ? 'Boys' : 'Girls'} Counter</h1>
           <div className="sub"><span className="live-dot" /> Live orders</div>
         </div>
-        <button className="icon-btn" onClick={toggleSound} aria-label="Sound">{soundOn ? '🔔' : '🔕'}</button>
-        <button className="icon-btn" onClick={switchUser} aria-label="Switch user">🚪</button>
+        <button className="icon-btn" onClick={toggleSound} aria-label="Sound">{soundOn ? <IconBell size={19} /> : <IconBellOff size={19} />}</button>
+        <button className="icon-btn" onClick={switchUser} aria-label="Switch user"><IconDoor size={19} /></button>
       </header>
 
       <div className="scroll flush-bottom">
@@ -251,7 +263,7 @@ export default function ReceiverPage() {
             Waiting <span className="cnt">{waiting}</span>
           </button>
           <button className={`rt${tab === 'parcel' ? ' on' : ''}`} onClick={() => setTab('parcel')}>
-            📦 Parcel <span className="cnt">{parcelWaiting}</span>
+            <IconBox size={17} /> Parcel <span className="cnt">{parcelWaiting}</span>
           </button>
           <button className={`rt${tab === 'done' ? ' on' : ''}`} onClick={() => setTab('done')}>
             Served today <span className="cnt">{board.doneToday.count}</span>
@@ -259,14 +271,24 @@ export default function ReceiverPage() {
         </div>
 
         <div className="search-wrap" style={{ marginTop: 4 }}>
-          <span className="s-ico">🔎</span>
+          <span className="s-ico"><IconSearch size={17} /></span>
           <input type="text" placeholder={tab === 'parcel' ? 'Search code, name, event…' : 'Search order number (e.g. B-12)…'} value={search} onChange={(e) => setSearch(e.target.value)} autoComplete="off" />
         </div>
         <div style={{ height: 12 }} />
         <div className="board-list">
-          {tab === 'parcel' ? (
-            parcelList.length === 0 ? (
-              <div className="empty"><span className="e-ico">📦</span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
+          {!loaded ? (
+            <>
+              <div className="skel skel-row" /><div className="skel skel-row" /><div className="skel skel-row" />
+            </>
+          ) : tab === 'parcel' ? (
+            !parcelLoaded ? (
+              <>
+                <div className="skel skel-row" /><div className="skel skel-row" />
+              </>
+            ) : parcelError && parcelList.length === 0 ? (
+              <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{parcelError}</p><button className="btn btn-primary" onClick={() => loadParcel()}>Try again</button></div>
+            ) : parcelList.length === 0 ? (
+              <div className="empty"><span className="e-ico" role="img" aria-label="Parcel box">📦</span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
             ) : (
               parcelList.map((o) => (
                 <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
@@ -305,15 +327,16 @@ export default function ReceiverPage() {
               ))
             )
           ) : error && !list.length ? (
-            <div className="empty"><span className="e-ico">📡</span><h3>Connection issue</h3><p>{error}</p></div>
+            <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{error}</p><button className="btn btn-primary" onClick={() => load()}>Try again</button></div>
           ) : list.length === 0 ? (
             tab === 'new' ? (
-              <div className="empty"><span className="e-ico">📭</span><h3>All caught up</h3><p>New orders will pop in here<br />with a sound alert.</p></div>
+              <div className="empty"><span className="e-ico" role="img" aria-label="Mailbox">📭</span><h3>All caught up</h3><p>New orders will pop in here<br />with a sound alert.</p></div>
             ) : (
-              <div className="empty"><span className="e-ico">✅</span><h3>Nothing served yet</h3><p>Orders you mark as served<br />today show up here.</p></div>
+              <div className="empty"><span className="e-ico" role="img" aria-label="Check mark">✅</span><h3>Nothing served yet</h3><p>Orders you mark as served<br />today show up here.</p></div>
             )
           ) : (
-            list.map((o) => (
+            <>
+              {(tab === 'done' ? list.slice(0, doneVisible) : list).map((o) => (
               <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
                 <div className="order-head">
                   <div className="token-chip" style={o.status === 'cancelled' ? { background: 'var(--bad)' } : undefined}>
@@ -348,7 +371,16 @@ export default function ReceiverPage() {
                   </div>
                 )}
               </div>
-            ))
+            ))}
+            {tab === 'done' && list.length > doneVisible && (
+              <div style={{ textAlign: 'center', marginTop: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>
+                  Showing {doneVisible} of {list.length}
+                </div>
+                <button className="btn btn-ghost" onClick={() => setDoneVisible((v) => v + 15)}>Show more</button>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>

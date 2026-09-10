@@ -5,6 +5,7 @@ import { api } from '@/lib/client'
 import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import { toast } from '@/lib/ui'
 import type { Stats } from './types'
+import { IconSearch, IconRefresh } from '@/components/icons'
 
 export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
   const [range, setRange] = useState('today')
@@ -40,9 +41,9 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         ))}
       </div>
 
-      {/* Active devices — 4 fully individual counters */}
+      {/* Active devices, 4 fully individual counters */}
       <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min) — each counter separate</div>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min), each counter separate</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #DBEAFE' }}>
             <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>👦 BOYS · SENDER</div>
@@ -196,18 +197,18 @@ function PublicOrdersCard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <div style={{ fontSize: 13, fontWeight: 900 }}>🎟️ Public orders (code-only, admin view)</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn sm ghost" onClick={load}>↻ Refresh</button>
+          <button className="btn sm ghost" onClick={load}><IconRefresh size={15} /> Refresh</button>
           <a href="/admin/public-orders" className="btn sm ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View →</a>
         </div>
       </div>
       <div className="search-wrap" style={{ marginTop: 10 }}>
-        <span className="s-ico">🔎</span>
+        <span className="s-ico"><IconSearch size={17} /></span>
         <input type="text" placeholder="Search order number (e.g. 632382)…" value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off" />
       </div>
       {err ? <div className="form-error show" style={{ marginTop: 8 }}>{err}</div> : null}
       {!filtered.length ? (
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>
-          {q ? `No match for "${q}"` : 'No public orders yet. They appear here with their 6-digit code — staff and other users cannot see them.'}
+          {q ? `No match for "${q}"` : 'No public orders yet. They appear here with their 6-digit code, staff and other users cannot see them.'}
         </p>
       ) : (
         <div style={{ marginTop: 10 }}>

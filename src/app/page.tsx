@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { buzz } from '@/lib/ui'
+import { SiteFooter } from '@/components/site-chrome'
+import { IconLock } from '@/components/icons'
 
 type Section = 'boys' | 'girls' | null
 
@@ -31,6 +33,7 @@ export default function Landing() {
   async function submitPwd(e: React.FormEvent) {
     e.preventDefault()
     if (!showPwd) return
+    if (!pwd) { setPwdErr('Enter the section password to continue'); return }
     setPwdBusy(true); setPwdErr('')
     try {
       const res = await fetch('/api/section/verify', {
@@ -65,7 +68,7 @@ export default function Landing() {
         <span className="float" style={{ top: 44, right: 120, animationDelay: '.7s' }}>🍚</span>
         <span className="logo">🍽️</span>
         <h1>Syllabites</h1>
-        <p>The campus food court, reimagined — fresh orders, zero queue.</p>
+        <p>Order from your counter and pick up by number. No standing in line.</p>
       </div>
 
       <div className="landing-label">Choose your side</div>
@@ -84,11 +87,12 @@ export default function Landing() {
         </button>
       </div>
 
-      <div className="landing-foot">
+      <div className="landing-foot" style={{ flexDirection: 'column', alignItems: 'center', gap: 4 }}>
         <button className="admin-link" onClick={() => router.push('/admin')}>
-          🔐 Admin login
+          <IconLock size={15} /> Admin login
         </button>
       </div>
+      <SiteFooter />
 
       {/* Password popup */}
       {showPwd && (
@@ -100,6 +104,7 @@ export default function Landing() {
               {pwdErr && <div className="form-error show">{pwdErr}</div>}
               <div className="field">
                 <input type="password" value={pwd} onChange={e=>setPwd(e.target.value)} placeholder="Password" autoFocus />
+                <div className="hint">Ask a volunteer at the counter if you don&apos;t know it.</div>
               </div>
               <div className="confirm-actions">
                 <button type="button" className="btn btn-ghost" onClick={()=>setShowPwd(null)}>Cancel</button>
@@ -114,7 +119,7 @@ export default function Landing() {
       {showRolePopup && (
         <div className="confirm-wrap show" style={{ zIndex: 70 }}>
           <div className="confirm-card" style={{ maxWidth: 360 }}>
-            <h3>{showRolePopup === 'boys' ? '👦 Boys' : '👧 Girls'} — choose role</h3>
+            <h3>{showRolePopup === 'boys' ? '👦 Boys' : '👧 Girls'}: choose your role</h3>
             <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 4 }}>How will you use this device?</p>
             <div style={{ display: 'grid', gap: 10, marginTop: 16 }}>
               <button className="role-btn" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: '14px 16px' }} disabled={busy} onClick={() => go('sender')}>
@@ -123,7 +128,7 @@ export default function Landing() {
               </button>
               <button className="role-btn" style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: '14px 16px' }} disabled={busy} onClick={() => go('receiver')}>
                 <span className="rb-ico" style={{ fontSize: 28 }}>📋</span>
-                <span><b>Order Receiver</b><br /><small>Counter view — manage orders</small></span>
+                <span><b>Order Receiver</b><br /><small>Counter view for managing orders</small></span>
               </button>
             </div>
             <div style={{ marginTop: 14, textAlign: 'center' }}>

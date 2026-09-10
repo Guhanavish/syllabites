@@ -11,12 +11,13 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   const [err, setErr] = useState('')
   const [username, setUsername] = useState('')
   const [backups, setBackups] = useState<Backup[]>([])
+  const [backupsLoading, setBackupsLoading] = useState(true)
 
   const loadBackups = useCallback(async () => {
     try {
       const list = await api<Backup[]>('/api/admin/backups')
       setBackups(Array.isArray(list) ? list : [])
-    } catch (e: any) { expired(e) }
+    } catch (e: any) { expired(e) } finally { setBackupsLoading(false) }
   }, [expired])
 
   useEffect(() => { loadBackups() }, [loadBackups])
@@ -40,7 +41,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     const pw = String(new FormData(e.currentTarget).get('gpw') || '')
     try {
       await api('/api/admin/gate-password', { method: 'POST', body: { newPassword: pw } })
-      toast('Access password updated — other devices must re-enter it', 'ok')
+      toast('Access password updated, other devices must re-enter it', 'ok')
       e.currentTarget.reset()
     } catch (ex: any) {
       if (isSessionExpired(ex)) { expired(ex); return }
@@ -69,7 +70,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   async function startOffer() {
     try {
       const r = await api('/api/admin/offer/start', { method: 'POST' })
-      toast('Offer started — 3 lucky orders will get 5-10% off! 🎉', 'ok')
+      toast('Offer started, 3 lucky orders will get 5-10% off! 🎉', 'ok')
       loadOffer()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -122,7 +123,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   async function importBackup(b: Backup) {
     const ok = await confirmBox({
       title: `Import backup #${b.id}?`,
-      msg: 'Current data is backed up automatically first — nothing can be lost. Then menu/orders/sales are replaced with this backup.',
+      msg: 'Current data is backed up automatically first, nothing can be lost. Then menu/orders/sales are replaced with this backup.',
       yes: 'Back up now & import',
       danger: false,
     })
@@ -144,7 +145,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
           <div>
             <b>Administrator</b>
             <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>
-              You can see everything — menu, stock &amp; both counters.
+              You can see everything: menu, stock and both counters.
             </div>
           </div>
         </div>
@@ -173,6 +174,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         <form onSubmit={changeGatePw} noValidate>
           <div className="field">
             <input name="gpw" type="password" autoComplete="new-password" placeholder="New access password (min 4)" />
+            <div className="hint">At least 4 characters. Every device must re-enter it.</div>
           </div>
           <button className="btn btn-dark block">Update access password</button>
         </form>
@@ -188,11 +190,11 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
           Separate passwords for each counter. Only admin can change them. Current defaults: Boys <code>boyzz</code>, Girls <code>girls</code>.
         </p>
         <form onSubmit={(e) => changeSectionPw('boys', e)} noValidate style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Boys password</label><input name="spw" type="password" placeholder="New boys password" /></div>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Boys password</label><input name="spw" type="password" placeholder="New boys password" /><div className="hint">At least 3 characters.</div></div>
           <button className="btn btn-dark" style={{ height: 48 }}>Update</button>
         </form>
         <form onSubmit={(e) => changeSectionPw('girls', e)} noValidate style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginTop: 12 }}>
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Girls password</label><input name="spw" type="password" placeholder="New girls password" /></div>
+          <div className="field" style={{ flex: 1, marginBottom: 0 }}><label>Girls password</label><input name="spw" type="password" placeholder="New girls password" /><div className="hint">At least 3 characters.</div></div>
           <button className="btn btn-dark" style={{ height: 48 }}>Update</button>
         </form>
       </div>
@@ -212,12 +214,12 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
             <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? '🟢 Active' : '⚪ Inactive'} · Remaining: {offer.remaining} / 3</div>
             {offer.discountedOrders?.length ? (
               <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Report — discounted orders:</div>
+                <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Discounted orders report:</div>
                 {offer.discountedOrders.map((d: any) => (
                   <div key={d.code} className="alert-row" style={{ padding: '8px 0' }}>
                     <span className="alert-emoji">🎟️</span>
                     <span className="alert-name">
-                      Code <b>{d.code}</b> — {d.customerName} ({d.customerClass}) · {d.discountPercent}% off
+                      Code <b>{d.code}</b>, {d.customerName} ({d.customerClass}) · {d.discountPercent}% off
                       <br /><small style={{ color: 'var(--muted)' }}>{d.originalTotal ? `${((d.originalTotal)/100).toFixed(2)} → ${(d.total/100).toFixed(2)}` : ''} · Saved {d.discountAmount ? (d.discountAmount/100).toFixed(2) : ''}</small>
                     </span>
                   </div>
@@ -239,7 +241,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         <form onSubmit={changeAdminPw} noValidate>
           {err && <div className="form-error show">{err}</div>}
           <div className="field"><input type="password" name="cur" autoComplete="current-password" placeholder="Current password" /></div>
-          <div className="field"><input type="password" name="new" autoComplete="new-password" placeholder="New password (min 6)" /></div>
+          <div className="field"><input type="password" name="new" autoComplete="new-password" placeholder="New password (min 6)" /><div className="hint">At least 6 characters.</div></div>
           <div className="field"><input type="password" name="new2" autoComplete="new-password" placeholder="Repeat new password" /></div>
           <button className="btn btn-dark block">Update password</button>
         </form>
@@ -250,12 +252,14 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         <b style={{ fontSize: 15 }}>Data &amp; backups</b>
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
           Resetting always saves a full backup on the server first. Importing a backup always saves the current
-          data before anything changes — nothing is ever lost.
+          data before anything changes, nothing is ever lost.
         </p>
         <button className="btn btn-ghost block" onClick={createBackup}>💾 Save a backup now</button>
 
         <div style={{ marginTop: 14 }}>
-          {!backups.length ? (
+          {backupsLoading ? (
+            <div className="skel skel-row" />
+          ) : !backups.length ? (
             <small style={{ color: 'var(--muted)', fontWeight: 600 }}>No backups yet.</small>
           ) : backups.map((b) => (
             <div key={b.id} className="alert-row">
@@ -282,7 +286,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         <div className="sr-ico">☁️</div>
         <div className="sr-main">
           <b>Cloud data</b>
-          <small>All orders, sales and stock live in your Supabase database — safe across restarts and code updates.</small>
+          <small>All orders, sales and stock live in your Supabase database, safe across restarts and code updates.</small>
         </div>
       </div>
 

@@ -1,0 +1,23 @@
+# Syllabites
+
+> Campus food court ordering web app. Boys and Girls counters with sender and receiver roles, plus entrance parcel ordering.
+
+## What this site does
+- Staff on Boys and Girls counters send food orders from phones and serve them from counter screens.
+- Visitors at the entrance place parcel orders with a 6-digit pickup code.
+- An admin panel manages both menus, stock, sales, discounts, and backups.
+- Access is gated: a shared app password opens the app, then each counter has its own section password.
+
+## Pages
+- `/`: welcome screen, entrance parcel ordering, staff entry.
+- `/sender`: counter menu and order sending (needs section password, set on device).
+- `/receiver`: live counter board for serving orders (needs section password).
+- `/admin`: admin login and dashboard (menu, orders, sales, settings).
+- `/admin/public-orders`: admin view of entrance parcel orders.
+- `/terms`: terms of use.
+- `/privacy`: privacy policy.
+
+## Notes for AI assistants
+- This is an operational tool for a real food counter, not a marketing site. Prefer accuracy over promotion.
+- Prices are in INR. Menu prices, stock counts, sales totals, and admin analytics are admin-only.
+- Do not invent menu items, prices, testimonials, or usage statistics.

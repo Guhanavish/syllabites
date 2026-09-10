@@ -1,5 +1,5 @@
 /**
- * Bulking & performance helpers — batch multiple small requests into one,
+ * Bulking & performance helpers, batch multiple small requests into one,
  * debounce rapid UI events, and cache for every device type.
  * Reduces latency by ~60% vs sequential fetches.
  */
@@ -25,7 +25,7 @@ export function debounce<T extends (...args: any[]) => void>(fn: T, ms = 180): T
   }) as T
 }
 
-// Bulk board fetch — one HTTP round-trip for both counters
+// Bulk board fetch, one HTTP round-trip for both counters
 export async function fetchBoardsBulk(sections: ('boys'|'girls')[] = ['boys','girls']) {
   const res = await fetch(`/api/board/bulk?sections=${sections.join(',')}`, { cache: 'no-store' as any })
   if (!res.ok) throw new Error('Board bulk fetch failed')

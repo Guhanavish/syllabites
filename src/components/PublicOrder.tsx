@@ -3,8 +3,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import { db, fetchMenu } from '@/lib/db'
 import { inr } from '@/lib/fmt'
-import { toast, buzz, chime } from '@/lib/ui'
+import { toast, buzz, chime, useOnline } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
+import { IconSearch } from '@/components/icons'
+
+function DetailField({ label, hint, error, ...props }: {
+  label: string
+  hint: string
+  error: string
+} & React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="field" style={{ marginBottom: 0 }}>
+      <label>{label}</label>
+      <input
+        {...props}
+        aria-invalid={error ? true : undefined}
+        style={error ? { borderColor: 'var(--bad)' } : undefined}
+      />
+      {error ? (
+        <div style={{ fontSize: 11.5, color: 'var(--bad)', fontWeight: 700, marginTop: 4 }}>{error}</div>
+      ) : (
+        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginTop: 4 }}>{hint}</div>
+      )}
+    </div>
+  )
+}
 
 type Cart = Record<string, number>
 type Placed = { id: number; code: string; total: number; originalTotal?: number; discountPercent?: number; discountAmount?: number; isDiscounted?: boolean; items: { name: string; emoji: string; qty: number; lineTotal: number }[] }
@@ -21,14 +44,23 @@ export function PublicOrder() {
   const [klass, setKlass] = useState('')
   const [section, setSection] = useState('')
   const [eventName, setEventName] = useState('')
+  const [tried, setTried] = useState(false)
+  const [menuLoaded, setMenuLoaded] = useState(false)
+  const [menuError, setMenuError] = useState('')
+  const online = useOnline()
 
   const loadMenu = useCallback(async () => {
     try {
-      // Parcel menu is separate storage (parcel_items) — staff items never leak here
+      // Parcel menu is separate storage (parcel_items), staff items never leak here
       const list = await fetchMenu('parcel_items')
       setItems(list)
       setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
-    } catch {}
+      setMenuLoaded(true)
+      setMenuError('')
+    } catch {
+      setMenuLoaded(true)
+      setMenuError("Can't reach the server. Check your internet connection.")
+    }
   }, [])
 
   useEffect(() => { loadMenu() }, [loadMenu])
@@ -62,9 +94,18 @@ export function PublicOrder() {
     return { count: a.count + qty, totalP: a.totalP + it.price * qty }
   }, { count: 0, totalP: 0 })
 
+  const missing = {
+    name: !name.trim() ? 'Please enter your name' : '',
+    klass: !klass.trim() ? 'Please enter your class, e.g. 10-A' : '',
+    section: !section.trim() ? 'Please enter your section, e.g. A' : '',
+    eventName: !eventName.trim() ? 'Please enter the event you are attending' : '',
+  }
+  const detailsOk = !missing.name && !missing.klass && !missing.section && !missing.eventName
+
   async function place() {
     if (!totals.count || sending) return
-    if (!name.trim() || !klass.trim() || !section.trim() || !eventName.trim()) {
+    setTried(true)
+    if (!detailsOk) {
       toast('Please fill Name, Class, Section and Event', 'bad'); return
     }
     for (const qty of Object.values(cart)) if ((qty as number) > 10) { toast('Approach Volunteers For more orders', 'bad'); return }
@@ -93,7 +134,7 @@ export function PublicOrder() {
         {placed.isDiscounted && (
           <div style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)', color: '#fff', borderRadius: 18, padding: '16px 14px', textAlign: 'center', marginBottom: 14, animation: 'pop .45s cubic-bezier(.2,.9,.3,1.3)' }}>
             <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: '.02em' }}>Yay!!, You Got the Discount</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, opacity: .95 }}>{placed.discountPercent}% OFF — You saved {inr(placed.discountAmount || 0)}! 🎉</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, opacity: .95 }}>{placed.discountPercent}% OFF, You saved {inr(placed.discountAmount || 0)}! 🎉</div>
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, opacity: .9 }}>Original {inr(placed.originalTotal || 0)} → Now {inr(placed.total)}</div>
           </div>
         )}
@@ -114,7 +155,7 @@ export function PublicOrder() {
           </div>
         </div>
         <button className="btn btn-primary xl block" style={{ marginTop: 18 }} onClick={() => setPlaced(null)}>Place another order</button>
-        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 10 }}>Keep this code safe — it will not be shown again.</p>
+        <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 11, fontWeight: 600, marginTop: 10 }}>Keep this code safe, it will not be shown again.</p>
       </div>
     )
   }
@@ -124,14 +165,14 @@ export function PublicOrder() {
       <div className="card pad" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Your details</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div className="field" style={{ marginBottom: 0 }}><label>Name</label><input type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} /></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>Class</label><input type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} /></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>Section</label><input type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} /></div>
-          <div className="field" style={{ marginBottom: 0 }}><label>Event participating</label><input type="text" placeholder="" value={eventName} onChange={e=>setEventName(e.target.value)} /></div>
+          <DetailField label="Name" hint="Your full name" error={tried ? missing.name : ''} type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} autoComplete="name" />
+          <DetailField label="Class" hint="e.g. 10-A" error={tried ? missing.klass : ''} type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} autoComplete="off" />
+          <DetailField label="Section" hint="e.g. A" error={tried ? missing.section : ''} type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} autoComplete="off" />
+          <DetailField label="Event participating" hint="Event you came for" error={tried ? missing.eventName : ''} type="text" placeholder="e.g. Science Expo" value={eventName} onChange={e=>setEventName(e.target.value)} autoComplete="off" />
         </div>
       </div>
 
-      <div className="search-wrap"><span className="s-ico">🔎</span>
+      <div className="search-wrap"><span className="s-ico"><IconSearch size={17} /></span>
         <input type="text" placeholder="Search food…" value={q} onChange={e => setQ(e.target.value)} autoComplete="off" />
       </div>
       <div className="chips-row" style={{ marginTop: 10 }}>
@@ -139,13 +180,19 @@ export function PublicOrder() {
       </div>
       <div className="divider-label">Menu</div>
       <div className="menu-list" style={{ paddingBottom: totals.count ? 90 : 0 }}>
-        {filtered.length === 0 ? (
-          <div className="empty"><span className="e-ico">🍳</span><h3>Menu coming soon</h3><p>Kitchen will add items shortly.</p></div>
+        {!menuLoaded ? (
+          <>
+            <div className="skel skel-row" /><div className="skel skel-row" /><div className="skel skel-row" />
+          </>
+        ) : menuError && filtered.length === 0 ? (
+          <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{menuError}</p><button className="btn btn-primary" onClick={() => loadMenu()}>Try again</button></div>
+        ) : filtered.length === 0 ? (
+          <div className="empty"><span className="e-ico" role="img" aria-label="Frying pan">🍳</span><h3>Menu coming soon</h3><p>Kitchen will add items shortly.</p></div>
         ) : filtered.map(it => {
           const inCart = cart[String(it.id)] || 0
           return (
             <div key={it.id} className={`item-row enter${it.stock === 0 ? ' out' : ''}`} style={{ animationDelay: '0s' }}>
-              <div className="emoji-tile">{it.emoji}</div>
+              <div className="emoji-tile" role="img" aria-label={it.name}>{it.emoji}</div>
               <div className="item-info">
                 <div className="item-name">{it.name}</div>
                 <div className="item-cat">{it.category}</div>
@@ -173,8 +220,13 @@ export function PublicOrder() {
           <div className="cb-count">{totals.count} {totals.count === 1 ? 'item ready' : 'items ready'}</div>
           <div className="cb-total">{inr(totals.totalP)}</div>
         </div>
-        <button className="go" disabled={sending} onClick={place}>{sending ? 'Placing…' : 'Place order ➤'}</button>
+        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={place}>{sending ? 'Placing…' : 'Place order ➤'}</button>
       </div>
+      {!online && totals.count > 0 && (
+        <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--bad)', paddingBottom: 90 }}>
+          Can&apos;t reach the server. Check your internet connection.
+        </div>
+      )}
     </>
   )
 }

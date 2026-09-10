@@ -6,13 +6,15 @@ import { db, fetchMenu } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { MenuItem, Order } from '@/lib/fmt'
-import { toast, buzz, chime, confirmBox } from '@/lib/ui'
+import { toast, buzz, chime, confirmBox, useOnline } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
+import { IconMenu, IconReceipt, IconSearch, IconDoor } from '@/components/icons'
 
 type Cart = Record<string, number>
 
 export default function SenderPage() {
   const router = useRouter()
+  const online = useOnline()
   const [section, setSection] = useState<'boys' | 'girls' | null>(null)
   const [tab, setTab] = useState<'menu' | 'orders'>('menu')
   const [items, setItems] = useState<MenuItem[]>([])
@@ -22,7 +24,9 @@ export default function SenderPage() {
   const [cart, setCart] = useState<Cart>({})
   const [mine, setMine] = useState<Order[]>([])
   const [loaded, setLoaded] = useState(false)
+  const [ordersLoaded, setOrdersLoaded] = useState(false)
   const [sending, setSending] = useState(false)
+  const [justSent, setJustSent] = useState<Order | null>(null)
   const tokensRef = useRef<{ t: string; id: number }[]>([])
 
   /* ---------- session guard ---------- */
@@ -53,11 +57,13 @@ export default function SenderPage() {
 
   const loadMine = useCallback(async () => {
     const toks = loadTokens().map((x) => x.t)
-    if (!toks.length) { setMine([]); return }
+    if (!toks.length) { setMine([]); setOrdersLoaded(true); return }
     try {
       const res = await api<{ length: number }>('/api/orders/mine', { method: 'POST', body: { tokens: toks } })
       setMine(Array.isArray(res) ? (res as unknown as Order[]) : [])
-    } catch {}
+    } catch {} finally {
+      setOrdersLoaded(true)
+    }
   }, [loadTokens])
 
   useEffect(() => {
@@ -96,7 +102,7 @@ export default function SenderPage() {
     return () => { db().removeChannel(ch) }
   }, [section, loadMenu, loadMine])
 
-  /* ---------- cart ops — max 30 per item for Boys/Girls counters ---------- */
+  /* ---------- cart ops, max 30 per item for Boys/Girls counters ---------- */
   function addToCart(id: number, delta: number) {
     const it = items.find((x) => x.id === id)
     if (!it || !it.available || !section) return
@@ -138,7 +144,7 @@ export default function SenderPage() {
       setCart({})
       localStorage.removeItem(`fc.cart.${section}`)
       buzz([30, 60, 30]); chime()
-      toast(`✅ Order ${ordNo(order)} sent! Keep ordering — food is given by this number`, 'ok', 4200)
+      setJustSent(order)
       loadMine()
     } catch (e: any) {
       toast(e.message || 'Could not send the order', 'bad', 3600)
@@ -183,15 +189,15 @@ export default function SenderPage() {
           <div className="sub">{section === 'boys' ? 'Boys' : 'Girls'} side · Order from your phone</div>
         </div>
         <button className="icon-btn" onClick={() => setTab('orders')} aria-label="My orders">
-          🧾{activeN > 0 && <span className="dot-badge">{activeN}</span>}
+          <IconReceipt size={20} />{activeN > 0 && <span className="dot-badge">{activeN}</span>}
         </button>
-        <button className="icon-btn" onClick={switchUser} aria-label="Switch user">🚪</button>
+        <button className="icon-btn" onClick={switchUser} aria-label="Switch user"><IconDoor size={19} /></button>
       </header>
 
       <div className="scroll">
         <div style={{ display: tab === 'menu' ? '' : 'none' }}>
           <div className="search-wrap">
-            <span className="s-ico">🔎</span>
+            <span className="s-ico"><IconSearch size={17} /></span>
             <input type="text" placeholder="Search food…" value={q}
               onChange={(e) => setQ(e.target.value)} autoComplete="off" />
           </div>
@@ -216,7 +222,7 @@ export default function SenderPage() {
               const inCart = cart[String(it.id)] || 0
               return (
                 <div key={it.id} className={`item-row${it.stock === 0 || !it.available ? ' out' : ''}`}>
-                  <div className="emoji-tile">{it.emoji}</div>
+                  <div className="emoji-tile" role="img" aria-label={it.name}>{it.emoji}</div>
                   <div className="item-info">
                     <div className="item-name">{it.name}</div>
                     <div className="item-cat">{it.category}</div>
@@ -241,12 +247,16 @@ export default function SenderPage() {
         </div>
 
         <div style={{ display: tab === 'orders' ? '' : 'none' }}>
-          {mine.length === 0 ? (
+          {!ordersLoaded ? (
+            <>
+              <div className="skel skel-row" /><div className="skel skel-row" />
+            </>
+          ) : mine.length === 0 ? (
             <div className="empty">
-              <span className="e-ico">🧾</span>
+              <span className="e-ico" role="img" aria-label="Receipt">🧾</span>
               <h3>No orders yet</h3>
               <p>Food you send will appear here<br />with its order code.</p>
-              <button className="btn btn-primary" onClick={() => setTab('menu')}>Browse menu 🍜</button>
+              <button className="btn btn-primary" onClick={() => setTab('menu')}>Browse menu</button>
             </div>
           ) : (
             mine.map((o) => (
@@ -263,6 +273,10 @@ export default function SenderPage() {
                     </div>
                   </div>
                 </div>
+                <div className="track" aria-label={`Order status: ${statusPill(o.status)}`}>
+                  <span className={`seg ${o.status === 'placed' || o.status === 'completed' ? 'done' : ''}`} />
+                  <span className={`seg ${o.status === 'completed' ? 'done' : o.status === 'placed' ? 'active' : ''}`} />
+                </div>
                 <div className="order-items">
                   {o.items.map((li, ix) => (
                     <div key={ix} className="oi-line">
@@ -275,7 +289,7 @@ export default function SenderPage() {
                 </div>
                 {o.status === 'completed' && (
                   <div style={{ background: 'var(--ok-tint)', color: 'var(--ok)', borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 800, marginTop: 11 }}>
-                    ✓ Served — enjoy your food!
+                    ✓ Served, enjoy your food!
                   </div>
                 )}
                 {o.status === 'cancelled' && (
@@ -300,18 +314,46 @@ export default function SenderPage() {
           <div className="cb-count">{totals.count} {totals.count === 1 ? 'item ready' : 'items ready'}</div>
           <div className="cb-total">{inr(totals.totalP)}</div>
         </div>
-        <button className="go" disabled={sending} onClick={sendOrder}>{sending ? 'Sending…' : 'Send ➤'}</button>
+        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={sendOrder}>{sending ? 'Sending…' : 'Send ➤'}</button>
       </div>
+      {!online && totals.count > 0 && tab === 'menu' && (
+        <div style={{ position: 'absolute', left: 14, right: 14, bottom: 'calc(var(--nav-h) + var(--sab) + 76px)', zIndex: 15, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--bad)' }}>
+          Can&apos;t reach the server. Check your internet connection.
+        </div>
+      )}
 
       <nav className="bottomnav">
         <button className={`nav-tab${tab === 'menu' ? ' on' : ''}`} onClick={() => setTab('menu')}>
-          <span className="ico">🍜</span>Menu
+          <span className="ico"><IconMenu size={22} /></span>Menu
         </button>
         <button className={`nav-tab${tab === 'orders' ? ' on' : ''}`} onClick={() => setTab('orders')}>
-          <span className="ico">🧾</span>My Orders
+          <span className="ico"><IconReceipt size={22} /></span>My Orders
           {activeN > 0 && <span className="tab-badge">{activeN}</span>}
         </button>
       </nav>
+
+      {justSent && (
+        <div className="success-wrap" role="alertdialog" aria-label="Order confirmed">
+          <div className="success-card">
+            <div className="check-circle"><span>✓</span></div>
+            <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order sent!</h2>
+            <div className="success-token">{ordNo(justSent)}</div>
+            <p className="success-sub">
+              Show this number at the counter to collect your food.
+              <br />
+              {inr(justSent.total)} · {justSent.items.reduce((a, li) => a + li.qty, 0)} items
+            </p>
+            <div style={{ display: 'flex', gap: 9, marginTop: 18 }}>
+              <button className="btn btn-ghost" style={{ flex: 1 }} onClick={() => { setJustSent(null); setTab('menu') }}>
+                Back to menu
+              </button>
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => { setJustSent(null); setTab('orders') }}>
+                Track order
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

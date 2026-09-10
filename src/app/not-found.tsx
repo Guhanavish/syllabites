@@ -1,0 +1,18 @@
+import Link from 'next/link'
+
+export default function NotFound() {  return (
+    <div className="root">
+      <div className="scroll">
+        <div className="empty">
+          <span className="e-ico" role="img" aria-label="Empty plate">🍽️</span>
+          <h1 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>This plate is empty</h1>
+          <p>The page you asked for is not on the menu. It may have moved or the link may be wrong.</p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18, flexWrap: 'wrap' }}>
+            <Link className="btn btn-primary" href="/" style={{ textDecoration: 'none' }}>Back to home</Link>
+            <Link className="btn btn-ghost" href="/sender" style={{ textDecoration: 'none' }}>Counter menu</Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

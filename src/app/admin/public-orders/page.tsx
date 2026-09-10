@@ -4,17 +4,23 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/client'
 import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import { toast } from '@/lib/ui'
+import { Crumbs } from '@/components/site-chrome'
+import { IconSearch, IconBack, IconRefresh } from '@/components/icons'
 
 export default function PublicOrdersPage() {
   const [orders, setOrders] = useState<any[]>([])
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState('all')
+  const [loading, setLoading] = useState(true)
+  const [visible, setVisible] = useState(15)
 
   const load = useCallback(async () => {
     try {
       const data = await api<any[]>('/api/public/admin-list')
       setOrders(Array.isArray(data) ? data : [])
-    } catch {}
+    } catch {} finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -40,18 +46,19 @@ export default function PublicOrdersPage() {
   return (
     <div className="root">
       <header className="topbar">
-        <a href="/admin" className="icon-btn" style={{ textDecoration: 'none' }}>←</a>
-        <div className="titles"><h1>Public Orders</h1><div className="sub">Organized view — entrance orders (6-digit codes)</div></div>
-        <button className="icon-btn" onClick={load}>↻</button>
+        <a href="/admin" className="icon-btn" style={{ textDecoration: 'none' }} aria-label="Back to admin"><IconBack size={18} /></a>
+        <div className="titles"><h1>Public Orders</h1><div className="sub">Organized view of entrance orders (6-digit codes)</div></div>
+        <button className="icon-btn" onClick={load} aria-label="Refresh"><IconRefresh size={17} /></button>
       </header>
 
       <div className="scroll">
-        <div className="search-wrap"><span className="s-ico">🔎</span>
-          <input type="text" placeholder="Search code, name, class, event…" value={q} onChange={e=>setQ(e.target.value)} />
+        <Crumbs trail={[{ label: 'Admin', href: '/admin' }, { label: 'Public Orders' }]} />
+        <div className="search-wrap"><span className="s-ico"><IconSearch size={17} /></span>
+          <input type="text" placeholder="Search code, name, class, event…" value={q} onChange={e=>{setQ(e.target.value); setVisible(15)}} />
         </div>
         <div className="chips-row" style={{ marginTop: 10 }}>
           {['all','placed','completed','cancelled'].map(s=>(
-            <button key={s} className={`chip${filter===s?' on':''}`} onClick={()=>setFilter(s)}>{s}</button>
+            <button key={s} className={`chip${filter===s?' on':''}`} onClick={()=>{setFilter(s); setVisible(15)}}>{s}</button>
           ))}
         </div>
 
@@ -64,18 +71,24 @@ export default function PublicOrdersPage() {
           </div>
           {discounted.length > 0 && (
             <div style={{ marginTop: 12, background: 'var(--warn-tint)', borderRadius: 12, padding: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--warn)' }}>Report — discounted orders:</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--warn)' }}>Discounted orders report:</div>
               {discounted.map((o:any)=>(
-                <div key={o.id} style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{o.code} — {o.customerName} · {o.discountPercent}% off · saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)} → {inr(o.total)})</div>
+                <div key={o.id} style={{ fontSize: 12, fontWeight: 600, marginTop: 4 }}>{o.code}, {o.customerName} · {o.discountPercent}% off · saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)} → {inr(o.total)})</div>
               ))}
             </div>
           )}
         </div>
 
         <div style={{ marginTop: 14 }}>
-          {!filtered.length ? (
-            <div className="empty"><span className="e-ico">🎟️</span><h3>No orders</h3><p>Public orders placed at the entrance appear here.</p></div>
-          ) : filtered.map((o:any)=>(
+          {loading ? (
+            <>
+              <div className="skel skel-row" /><div className="skel skel-row" />
+            </>
+          ) : !filtered.length ? (
+            <div className="empty"><span className="e-ico" role="img" aria-label="Ticket">🎟️</span><h3>No orders</h3><p>Public orders placed at the entrance appear here.</p></div>
+          ) : (
+            <>
+              {filtered.slice(0, visible).map((o:any)=>(
             <div key={o.id} className="order-card enter" style={{ marginBottom: 12 }}>
               <div className="order-head">
                 <div className="token-chip"><span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span></div>
@@ -87,7 +100,7 @@ export default function PublicOrdersPage() {
               </div>
               <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: '10px 12px', marginTop: 10, fontSize: 12, fontWeight: 600 }}>
                 <div><b>Name:</b> {o.customerName} · <b>Class:</b> {o.customerClass} · <b>Section:</b> {o.customerSection} · <b>Event:</b> {o.eventName}</div>
-                {o.isDiscounted && <div style={{ color: 'var(--ok)', fontWeight: 800, marginTop: 4 }}>🎉 {o.discountPercent}% OFF — saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)})</div>}
+                {o.isDiscounted && <div style={{ color: 'var(--ok)', fontWeight: 800, marginTop: 4 }}>🎉 {o.discountPercent}% OFF, saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)})</div>}
               </div>
               <div className="order-items" style={{ marginTop: 10 }}>
                 {o.items?.map((li:any,ix:number)=>(
@@ -102,6 +115,16 @@ export default function PublicOrdersPage() {
               )}
             </div>
           ))}
+          {filtered.length > visible && (
+            <div style={{ textAlign: 'center', marginTop: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>
+                Showing {visible} of {filtered.length}
+              </div>
+              <button className="btn btn-ghost" onClick={()=>setVisible((v)=>v + 15)}>Show more</button>
+            </div>
+          )}
+          </>
+          )}
         </div>
       </div>
     </div>

@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/postgrest-js": "2.112.3",
+    "@supabase/realtime-js": "2.112.3",
     "@supabase/supabase-js": "^2.112.3",
-    "next": "16.3.2",
+    "next": "16.3.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -20,7 +22,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.2",
+    "eslint-config-next": "16.3.4",
     "typescript": "^5"
   }
 }

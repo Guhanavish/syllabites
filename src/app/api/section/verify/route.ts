@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sb } from '@/lib/supabase'
 import { cleanMsg } from '@/lib/server'
+import { authLimit } from '@/lib/ratelimit'
 
 export async function POST(req: NextRequest) {
+  const limited = authLimit(req)
+  if (limited) return limited
   const { section, password } = await req.json().catch(() => ({}))
   const sec = String(section ?? '')
-  const pw = String(password ?? '')
+  const pw = typeof password === 'string' ? password : ''
+  if ((sec !== 'boys' && sec !== 'girls') || !pw || pw.length > 200) {
+    return NextResponse.json({ error: 'Wrong password' }, { status: 401 })
+  }
   const { error } = await sb().rpc('verify_section_password', {
     p_section: sec,
     p_password: pw,

@@ -11,6 +11,8 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
   const [status, setStatus] = useState('all')
   const [today, setToday] = useState(true)
   const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [visible, setVisible] = useState(15)
 
   const load = useCallback(async (sec: string, st: string, td: boolean) => {
     try {
@@ -18,10 +20,10 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
         `/api/orders?section=${sec}&status=${st}&today=${td}`
       )
       setOrders(Array.isArray(res) ? res : [])
-    } catch (e: any) { expired(e) }
+    } catch (e: any) { expired(e) } finally { setLoading(false) }
   }, [expired])
 
-  useEffect(() => { load(section, status, today) }, [section, status, today, load])
+  useEffect(() => { setLoading(true); setVisible(15); load(section, status, today) }, [section, status, today, load])
   useEffect(() => {
     const p = setInterval(() => load(section, status, today), 15000)
     return () => clearInterval(p)
@@ -57,12 +59,17 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
         </select>
       </div>
 
-      {!orders.length ? (
+      {loading ? (
+        <>
+          <div className="skel skel-row" /><div className="skel skel-row" /><div className="skel skel-row" />
+        </>
+      ) : !orders.length ? (
         <div className="empty">
-          <span className="e-ico">🧾</span><h3>No orders found</h3><p>Try changing the filters above.</p>
+          <span className="e-ico" role="img" aria-label="Receipt">🧾</span><h3>No orders found</h3><p>Try changing the filters above.</p>
         </div>
       ) : (
-        orders.map((o) => (
+        <>
+          {orders.slice(0, visible).map((o) => (
           <div key={o.id} className="order-card" style={{ marginBottom: 12 }}>
             <div className="order-head">
               <div className="token-chip" style={o.status === 'cancelled' ? { background: 'var(--bad)' } : undefined}>
@@ -95,7 +102,16 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
               )}
             </div>
           </div>
-        ))
+        ))}
+        {orders.length > visible && (
+          <div style={{ textAlign: 'center', marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 8 }}>
+              Showing {visible} of {orders.length}
+            </div>
+            <button className="btn btn-ghost" onClick={() => setVisible((v) => v + 15)}>Show more</button>
+          </div>
+        )}
+        </>
       )}
     </>
   )
