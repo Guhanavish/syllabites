@@ -156,7 +156,7 @@
     for v_el in select * from jsonb_array_elements(p_items) loop
       v_id  := (v_el->>'itemId')::bigint;
       v_qty := coalesce((v_el->>'qty')::int, 0);
-      if v_qty < 1 or v_qty > 10 then
+      if v_qty < 1 or v_qty > 50 then
         raise exception 'Contanct The volunteers for high quantities';
       end if;
       select * into v_item from items where id = v_id for update;
