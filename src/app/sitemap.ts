@@ -1,7 +1,9 @@
 import type { MetadataRoute } from 'next'
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const pages = ['', '/sender', '/receiver', '/terms', '/privacy']
+  // NOTE: /sender and /receiver are password-gated staff screens,
+  // so they are intentionally excluded from the sitemap and set noindex.
+  const pages = ['', '/terms', '/privacy']
   return pages.map((p) => ({
     url: p,
     lastModified: new Date(),

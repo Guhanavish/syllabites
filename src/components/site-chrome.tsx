@@ -17,8 +17,7 @@ export function SiteFooter() {
     >
       <nav aria-label="Site" style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
         <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>Home</Link>
-        <Link href="/sender" style={{ color: 'inherit', textDecoration: 'none' }}>Counter menu</Link>
-        <Link href="/receiver" style={{ color: 'inherit', textDecoration: 'none' }}>Counter board</Link>
+        <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>Staff entry</Link>
         <Link href="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>
         <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
       </nav>

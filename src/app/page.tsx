@@ -25,7 +25,8 @@ export default function Landing() {
   function pick(s: 'boys' | 'girls') {
     buzz(10)
     setSection(s)
-    localStorage.setItem('fc.section', s)
+    // NOTE: fc.section is only persisted after the password verifies
+    // (see submitPwd), so closing the popup can't leave a fake session.
     setPwd(''); setPwdErr('')
     setShowPwd(s)
   }
@@ -43,6 +44,7 @@ export default function Landing() {
       const data = await res.json().catch(()=>({}))
       if (!res.ok) throw new Error(data.error || 'Wrong password')
       buzz(15)
+      try { localStorage.setItem('fc.section', showPwd) } catch {}
       setShowPwd(null)
       setShowRolePopup(showPwd)
     } catch (ex: any) {
