@@ -7,13 +7,14 @@
   --card: #ffffff;
   --ink: #241b14;
   --ink-2: #55483d;
-  --muted: #97897c;
+  --muted: #74665d;
   --line: rgba(36, 27, 20, 0.09);
   --line-2: rgba(36, 27, 20, 0.16);
 
   --brand-1: #f97316;
   --brand-2: #e11d48;
-  --grad-brand: linear-gradient(135deg, #fb923c 0%, #ef4e23 100%);
+  /* Darkened for white-text contrast (AA on the deep end, 3:1+ across). */
+  --grad-brand: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
   --grad-hero: radial-gradient(120% 90% at 85% -10%, #ffb066 0%, transparent 50%),
                radial-gradient(130% 110% at -10% 110%, #7c2d12 0%, transparent 55%),
                linear-gradient(150deg, #291a10 0%, #45200d 55%, #7c2d12 130%);

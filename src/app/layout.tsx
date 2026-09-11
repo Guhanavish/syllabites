@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { UiHost } from '@/lib/ui'
 import { GateLock } from '@/lib/gate'
+import { CookieNotice } from '@/components/cookie-notice'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://syllabites.vercel.app'),
@@ -72,6 +73,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {children}
           </GateLock>
           <UiHost />
+          <CookieNotice />
         </div>
       </body>
     </html>

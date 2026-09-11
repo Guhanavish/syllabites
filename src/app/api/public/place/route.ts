@@ -6,7 +6,11 @@ import { orderLimit } from '@/lib/ratelimit'
 export async function POST(req: NextRequest) {
   const limited = orderLimit(req)
   if (limited) return limited
-  const { items, name, klass, section, eventName } = await req.json().catch(() => ({}))
+  const { items, name, klass, section, eventName, company } = await req.json().catch(() => ({}))
+  // Honeypot: silently reject bot submissions that fill the hidden field.
+  if (typeof company === 'string' && company.trim() !== '') {
+    return NextResponse.json({ error: 'Could not place order' }, { status: 400 })
+  }
   const lines = asCartLines(items, 50, 10)
   const cName = asText(name, 60)
   const cKlass = asText(klass, 30)

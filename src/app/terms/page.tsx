@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Crumbs } from '@/components/site-chrome'
 
 export const metadata: Metadata = {
@@ -41,6 +42,9 @@ export default function TermsPage() {
             <h2 style={{ fontSize: 15, fontWeight: 800, color: 'var(--ink)' }}>6. Contact</h2>
             <p>For order help, speak to the volunteers at the counter. For anything about this app, contact the site operator through the links on the home screen.</p>
           </section>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <Link className="btn btn-primary block" href="/" style={{ textDecoration: 'none' }}>Back to home</Link>
         </div>
       </div>
     </div>

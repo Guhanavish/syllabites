@@ -47,6 +47,8 @@ export function PublicOrder() {
   const [tried, setTried] = useState(false)
   const [menuLoaded, setMenuLoaded] = useState(false)
   const [menuError, setMenuError] = useState('')
+  // Honeypot: real users never see or fill this; bots often do.
+  const [company, setCompany] = useState('')
   const online = useOnline()
 
   const loadMenu = useCallback(async () => {
@@ -115,7 +117,8 @@ export function PublicOrder() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: Object.entries(cart).map(([itemId, qty]) => ({ itemId: Number(itemId), qty })),
-          name: name.trim(), klass: klass.trim(), section: section.trim(), eventName: eventName.trim()
+          name: name.trim(), klass: klass.trim(), section: section.trim(), eventName: eventName.trim(),
+          company,
         })
       })
       const data = await res.json().catch(() => ({}))
@@ -169,6 +172,10 @@ export function PublicOrder() {
           <DetailField label="Class" hint="e.g. 10-A" error={tried ? missing.klass : ''} type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} autoComplete="off" />
           <DetailField label="Section" hint="e.g. A" error={tried ? missing.section : ''} type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} autoComplete="off" />
           <DetailField label="Event participating" hint="Event you came for" error={tried ? missing.eventName : ''} type="text" placeholder="e.g. Science Expo" value={eventName} onChange={e=>setEventName(e.target.value)} autoComplete="off" />
+        </div>
+        {/* Honeypot field for bots. Hidden from sighted users and screen readers. */}
+        <div aria-hidden="true" style={{ position: 'absolute', left: -9999, top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>
+          <input type="text" name="company" tabIndex={-1} autoComplete="off" value={company} onChange={e=>setCompany(e.target.value)} />
         </div>
       </div>
 
