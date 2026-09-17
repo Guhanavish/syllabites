@@ -7,23 +7,26 @@ import { toast, buzz, chime, useOnline } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
 import { IconSearch } from '@/components/icons'
 
-function DetailField({ label, hint, error, ...props }: {
+function DetailField({ label, hint, error, id, ...props }: {
   label: string
   hint: string
   error: string
+  id: string
 } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="field" style={{ marginBottom: 0 }}>
-      <label>{label}</label>
+      <label htmlFor={id}>{label}</label>
       <input
+        id={id}
         {...props}
         aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-err` : `${id}-hint`}
         style={error ? { borderColor: 'var(--bad)' } : undefined}
       />
       {error ? (
-        <div style={{ fontSize: 11.5, color: 'var(--bad)', fontWeight: 700, marginTop: 4 }}>{error}</div>
+        <div id={`${id}-err`} role="alert" style={{ fontSize: 11.5, color: 'var(--bad)', fontWeight: 700, marginTop: 4 }}>{error}</div>
       ) : (
-        <div style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginTop: 4 }}>{hint}</div>
+        <div id={`${id}-hint`} style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 600, marginTop: 4 }}>{hint}</div>
       )}
     </div>
   )
@@ -168,10 +171,10 @@ export function PublicOrder() {
       <div className="card pad" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Your details</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <DetailField label="Name" hint="Your full name" error={tried ? missing.name : ''} type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} autoComplete="name" />
-          <DetailField label="Class" hint="e.g. 10-A" error={tried ? missing.klass : ''} type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} autoComplete="off" />
-          <DetailField label="Section" hint="e.g. A" error={tried ? missing.section : ''} type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} autoComplete="off" />
-          <DetailField label="Event participating" hint="Event you came for" error={tried ? missing.eventName : ''} type="text" placeholder="e.g. Science Expo" value={eventName} onChange={e=>setEventName(e.target.value)} autoComplete="off" />
+          <DetailField id="po-name" label="Name" hint="Your full name" error={tried ? missing.name : ''} type="text" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} autoComplete="name" />
+          <DetailField id="po-klass" label="Class" hint="e.g. 10-A" error={tried ? missing.klass : ''} type="text" placeholder="e.g. 10-A" value={klass} onChange={e=>setKlass(e.target.value)} autoComplete="off" />
+          <DetailField id="po-section" label="Section" hint="e.g. A" error={tried ? missing.section : ''} type="text" placeholder="e.g. A" value={section} onChange={e=>setSection(e.target.value)} autoComplete="off" />
+          <DetailField id="po-event" label="Event participating" hint="Event you came for" error={tried ? missing.eventName : ''} type="text" placeholder="e.g. Science Expo" value={eventName} onChange={e=>setEventName(e.target.value)} autoComplete="off" />
         </div>
         {/* Honeypot field for bots. Hidden from sighted users and screen readers. */}
         <div aria-hidden="true" style={{ position: 'absolute', left: -9999, top: 'auto', width: 1, height: 1, overflow: 'hidden' }}>

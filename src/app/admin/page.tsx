@@ -129,7 +129,7 @@ function Login({ notice, onSuccess }: { notice?: string; onSuccess: () => void }
 
   return (
     <div className="login-wrap">
-      <div className="login-logo">🔐</div>
+      <div className="login-logo" aria-hidden="true"><IconLock size={40} /></div>
       <h2 style={{ textAlign: 'center', fontSize: 21, fontWeight: 900 }}>Admin Login</h2>
       <p style={{ textAlign: 'center', color: 'var(--muted)', fontWeight: 600, fontSize: 13, margin: '6px 0 22px' }}>
         Menu, stock &amp; sales are managed here

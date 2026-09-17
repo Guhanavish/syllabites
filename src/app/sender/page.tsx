@@ -183,7 +183,7 @@ export default function SenderPage() {
   return (
     <div className="root">
       <header className="topbar">
-        <div className="sec-chip">{section === 'boys' ? '👦' : '👧'}</div>
+        <div className="sec-chip" aria-hidden="true">{section === 'boys' ? 'B' : 'G'}</div>
         <div className="titles">
           <h1>Syllabites</h1>
           <div className="sub">{section === 'boys' ? 'Boys' : 'Girls'} side · Order from your phone</div>

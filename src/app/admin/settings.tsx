@@ -141,7 +141,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     <>
       <div className="card pad" style={{ marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div className="sec-chip" style={{ background: 'var(--ink)' }}>🔐</div>
+          <div className="sec-chip" style={{ background: 'var(--ink)' }} aria-hidden="true">A</div>
           <div>
             <b>Administrator</b>
             <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>

@@ -48,7 +48,7 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
-  background: #171310;
+  background: var(--bg-soft);
   color: var(--ink);
   font-size: 15px;
   line-height: 1.45;
@@ -74,12 +74,10 @@ h1, h2, h3, h4, p { margin: 0; }
   flex-direction: column;
   overflow: hidden;
 }
-@media (min-width: 500px) and (min-height: 700px) {
+@media (min-width: 500px) and (max-width: 899px) {
   .phone {
-    height: min(880px, calc(100dvh - 40px));
-    border-radius: 40px;
-    box-shadow: 0 0 0 10px #000, 0 0 0 12px #3a332c, 0 40px 80px -20px rgba(0,0,0,.7);
-    overflow: hidden;
+    max-width: 760px;
+    border-inline: 1px solid var(--line);
   }
 }
 .root { display: flex; flex-direction: column; height: 100%; min-height: 0; }
@@ -679,7 +677,7 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 
 /* ---- PC layout — same structure as phone, just comfortably wider ---- */
-/* Desktop: remove phone-frame bezels, keep phone-perfect below 900px */
+/* Desktop: remove phone-frame bezels, keep phone-perfect below 760px */
 @media (min-width: 900px) {
   body {
     background: var(--bg);
@@ -689,7 +687,7 @@ h1, h2, h3, h4, p { margin: 0; }
     overflow-y: auto;
   }
   .phone {
-    max-width: 520px;
+    max-width: 760px;
     margin: 0 auto;
     height: 100vh;
     height: 100dvh;
@@ -699,10 +697,56 @@ h1, h2, h3, h4, p { margin: 0; }
     border-right: 1px solid var(--line);
   }
 }
-@media (min-width: 1200px) {
-  .phone {
-    max-width: 560px;
-  }
+
+/* =============== REBUILD — flexible entry system (warm playful, single depth) =============== */
+.gate-root { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.gate-scroll { padding-top: 0; }
+.gate-topbar { justify-content: center; gap: 8px; }
+.gate-topbar .chip { flex: 1; justify-content: center; display: inline-flex; padding: 9px 10px; }
+.gate-order { padding-top: 14px; }
+.gate-backrow { text-align: left; margin-bottom: 8px; }
+.gate-lockmark { width: 56px; height: 56px; margin: 0 auto 10px; border-radius: 18px; display: grid; place-items: center; background: var(--bg-soft); border: 1px solid var(--line); box-shadow: var(--shadow-1); color: var(--ink-2); }
+.gate-heading { text-align: center; font-size: 21px; font-weight: 900; letter-spacing: -.01em; }
+.gate-lead { text-align: center; color: var(--muted); font-weight: 600; font-size: 13px; margin: 6px 0 22px; }
+.gate-alt { text-align: center; margin-top: 18px; }
+.sec-chip { font-weight: 900; font-size: 17px; }
+.login-logo { display: grid; place-items: center; color: var(--ink-2); }
+.welcome-layout { max-width: 520px; margin: 0 auto; padding: 6px 2px 0; width: 100%; }
+.welcome-title { font-size: 18px; font-weight: 900; text-align: center; letter-spacing: -.01em; }
+.welcome-sub { text-align: center; color: var(--muted); font-weight: 600; font-size: 13px; margin-top: 6px; }
+.welcome-actions { display: grid; gap: 12px; margin-top: 18px; }
+.brand-hero { margin: -16px -16px 18px; border-radius: 0 0 28px 28px; }
+.brand-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .14em; color: #ffd9bd; }
+.brand-title { font-size: 26px; font-weight: 900; letter-spacing: -.02em; margin-top: 10px; }
+.brand-sub { color: #ffd9bd; font-size: 13.5px; font-weight: 600; margin-top: 4px; }
+.credits { text-align: center; margin-top: 22px; }
+.credits-line { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .02em; opacity: .9; }
+.credits-socials { display: flex; justify-content: center; gap: 16px; margin-top: 10px; }
+.credits-socials a { font-size: 12.5px; font-weight: 800; color: var(--ink-2); text-decoration: none; padding: 8px 10px; border-radius: 10px; }
+.credits-socials a:hover { color: var(--ink); background: var(--bg-soft); }
+.site-footer { margin-top: 26px; padding-top: 18px; border-top: 1px solid var(--line); }
+.site-footer-links { display: flex; justify-content: center; gap: 18px; margin-bottom: 4px; }
+.site-footer-links a { font-size: 13px; font-weight: 700; color: var(--muted); text-decoration: none; padding: 8px 4px; }
+.site-footer-links a:hover { color: var(--ink); }
+.entry-panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-1); padding: 18px 16px; margin-top: 16px; animation: rise .35s cubic-bezier(.2,.8,.25,1); }
+.entry-intro h2 { font-size: 17px; font-weight: 900; letter-spacing: -.01em; margin-top: 8px; }
+.entry-intro p { color: var(--muted); font-weight: 600; font-size: 13px; margin-top: 4px; }
+.entry-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: var(--muted); padding: 8px 0; }
+.entry-back:hover { color: var(--ink); }
+.entry-ok { display: flex; align-items: center; gap: 8px; background: var(--ok-tint); color: var(--ok); font-size: 13px; font-weight: 800; border-radius: 12px; padding: 10px 12px; margin-top: 14px; }
+.role-list { display: grid; gap: 12px; margin-top: 14px; }
+.role-list .role-btn { display: flex; align-items: center; gap: 12px; text-align: left; }
+.role-list .rb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.role-list .rb-main b { font-size: 15px; }
+.role-list .rb-main small { color: var(--muted); font-weight: 600; font-size: 12px; }
+.role-list .rb-ico { width: 46px; height: 46px; flex: none; border-radius: 14px; display: grid; place-items: center; background: var(--bg-soft); border: 1px solid var(--line); }
+.role-btn-sender .rb-ico { background: #edf3fe; }
+.role-btn-receiver .rb-ico { background: #fdedf4; }
+.role-list .rb-go { transform: rotate(180deg); opacity: .5; flex: none; }
+.landing-foot { margin-top: auto; padding-top: 26px; display: flex; justify-content: center; }
+@media (min-width: 500px) {
+  .welcome-actions { grid-template-columns: 1fr 1fr; }
+  .entry-panel { padding: 22px 20px; }
 }
 
 /* ---- Next.js integration ---- */

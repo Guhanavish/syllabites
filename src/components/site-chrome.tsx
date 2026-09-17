@@ -1,29 +1,17 @@
 'use client'
 
-/* Shared footer with internal links. Rendered on public screens so every
-   page is one tap from the rest, and legal pages are always reachable. */
 import Link from 'next/link'
+import { Credits } from '@/components/brand'
 
 export function SiteFooter() {
   return (
-    <footer
-      style={{
-        textAlign: 'center',
-        padding: '20px 12px 8px',
-        fontSize: 12,
-        fontWeight: 700,
-        color: 'var(--muted)',
-      }}
-    >
-      <nav aria-label="Site" style={{ display: 'flex', justifyContent: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>Home</Link>
-        <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>Staff entry</Link>
-        <Link href="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms</Link>
-        <Link href="/privacy" style={{ color: 'inherit', textDecoration: 'none' }}>Privacy</Link>
+    <footer className="site-footer">
+      <nav className="site-footer-links" aria-label="Site">
+        <Link href="/">Home</Link>
+        <Link href="/terms">Terms</Link>
+        <Link href="/privacy">Privacy</Link>
       </nav>
-      <div style={{ marginTop: 8, fontSize: 11, letterSpacing: '0.02em', opacity: 0.9 }}>
-        Built by Guhanavish, Class XI. Inspired by Harish C, Class XII.
-      </div>
+      <Credits />
     </footer>
   )
 }

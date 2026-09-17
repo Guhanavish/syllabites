@@ -242,7 +242,7 @@ export default function ReceiverPage() {
   return (
     <div className="root">
       <header className="topbar">
-        <div className="sec-chip">{section === 'boys' ? '👦' : '👧'}</div>
+        <div className="sec-chip" aria-hidden="true">{section === 'boys' ? 'B' : 'G'}</div>
         <div className="titles">
           <h1>{section === 'boys' ? 'Boys' : 'Girls'} Counter</h1>
           <div className="sub"><span className="live-dot" /> Live orders</div>
@@ -253,8 +253,8 @@ export default function ReceiverPage() {
 
       <div className="scroll flush-bottom">
         <div className="stat-strip">
-          <div className="mini-stat hot"><div className="ms-v">{waiting}</div><div className="ms-l">Waiting 🔥</div></div>
-          <div className="mini-stat"><div className="ms-v">{board.doneToday.count}</div><div className="ms-l">Served ✓</div></div>
+          <div className="mini-stat hot"><div className="ms-v">{waiting}</div><div className="ms-l">Waiting</div></div>
+          <div className="mini-stat"><div className="ms-v">{board.doneToday.count}</div><div className="ms-l">Served</div></div>
           <div className="mini-stat"><div className="ms-v">{inr(board.doneToday.revenue)}</div><div className="ms-l">Today ₹</div></div>
         </div>
 
