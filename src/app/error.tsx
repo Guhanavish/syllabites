@@ -3,6 +3,8 @@
 /* Route-level 500 page: catches unhandled render/server errors inside the
    app shell and gives staff a human message plus a way out. */
 
+import { IconBox } from '@/components/icons'
+
 export default function RouteError({
   error,
   reset,
@@ -14,10 +16,10 @@ export default function RouteError({
     <div className="root">
       <div className="scroll">
         <div className="empty">
-          <span className="e-ico" role="img" aria-label="Cloche with a crack">
-            🍽️
+          <span className="e-ico" aria-hidden="true">
+            <IconBox size={24} />
           </span>
-          <h1 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Something went wrong in the kitchen</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Something went wrong</h1>
           <p>
             This screen hit an unexpected error and could not load.
             <br />

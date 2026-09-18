@@ -1,11 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { db, fetchMenu } from '@/lib/db'
 import { inr } from '@/lib/fmt'
-import { toast, buzz, chime, useOnline } from '@/lib/ui'
+import { toast, buzz, chime, useOnline, every } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
-import { IconSearch } from '@/components/icons'
+import { IconSearch, IconBox, IconTrash, IconCheck } from '@/components/icons'
 
 function DetailField({ label, hint, error, id, ...props }: {
   label: string
@@ -69,7 +69,7 @@ export function PublicOrder() {
   }, [])
 
   useEffect(() => { loadMenu() }, [loadMenu])
-  useEffect(() => { const t = setInterval(loadMenu, 12000); return () => clearInterval(t) }, [loadMenu])
+  useEffect(() => { const stop = every(12000, () => loadMenu()); return () => stop() }, [loadMenu])
 
   // realtime primary for parcel menu; polling above is the fallback
   useEffect(() => {
@@ -93,7 +93,10 @@ export function PublicOrder() {
     setCart({ ...cart, [String(id)]: next })
   }
 
-  const filtered = items.filter(i => i.available !== false && (cat === 'All' || i.category === cat) && (!q || i.name.toLowerCase().includes(q.toLowerCase())))
+  const filtered = useMemo(
+    () => items.filter(i => i.available !== false && (cat === 'All' || i.category === cat) && (!q || i.name.toLowerCase().includes(q.toLowerCase()))),
+    [items, cat, q]
+  )
   const totals = Object.entries(cart).reduce((a, [id, qty]) => {
     const it = items.find(x => x.id === Number(id)); if (!it) return a
     return { count: a.count + qty, totalP: a.totalP + it.price * qty }
@@ -138,14 +141,14 @@ export function PublicOrder() {
     return (
       <div className="scroll" style={{ paddingBottom: 24 }}>
         {placed.isDiscounted && (
-          <div style={{ background: 'linear-gradient(135deg,#f59e0b,#ef4444)', color: '#fff', borderRadius: 18, padding: '16px 14px', textAlign: 'center', marginBottom: 14, animation: 'pop .45s cubic-bezier(.2,.9,.3,1.3)' }}>
-            <div style={{ fontSize: 28, fontWeight: 900, letterSpacing: '.02em' }}>Yay!!, You Got the Discount</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, opacity: .95 }}>{placed.discountPercent}% OFF, You saved {inr(placed.discountAmount || 0)}! 🎉</div>
+          <div style={{ background: 'var(--ink)', color: '#fff', borderRadius: 12, padding: '16px 14px', textAlign: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0 }}>Discount applied</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 6, opacity: .95 }}>{placed.discountPercent}% OFF, You saved {inr(placed.discountAmount || 0)}.</div>
             <div style={{ fontSize: 12, fontWeight: 600, marginTop: 4, opacity: .9 }}>Original {inr(placed.originalTotal || 0)} → Now {inr(placed.total)}</div>
           </div>
         )}
         <div style={{ textAlign: 'center', padding: '18px 0 10px' }}>
-          <div className="check-circle" style={{ margin: '0 auto' }}><span>✓</span></div>
+          <div className="check-circle" style={{ margin: '0 auto' }}><span><IconCheck size={30} /></span></div>
           <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order placed!</h2>
           <p style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13, marginTop: 6 }}>Show this code at the counter.<br />Only you see it here.</p>
         </div>
@@ -195,9 +198,9 @@ export function PublicOrder() {
             <div className="skel skel-row" /><div className="skel skel-row" /><div className="skel skel-row" />
           </>
         ) : menuError && filtered.length === 0 ? (
-          <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{menuError}</p><button className="btn btn-primary" onClick={() => loadMenu()}>Try again</button></div>
+          <div className="empty"><span className="e-ico" aria-hidden="true"><IconSearch size={24} /></span><h3>Connection issue</h3><p>{menuError}</p><button className="btn btn-primary" onClick={() => loadMenu()}>Try again</button></div>
         ) : filtered.length === 0 ? (
-          <div className="empty"><span className="e-ico" role="img" aria-label="Frying pan">🍳</span><h3>Menu coming soon</h3><p>Kitchen will add items shortly.</p></div>
+          <div className="empty"><span className="e-ico" aria-hidden="true"><IconBox size={24} /></span><h3>Menu coming soon</h3><p>Kitchen will add items shortly.</p></div>
         ) : filtered.map(it => {
           const inCart = cart[String(it.id)] || 0
           return (
@@ -213,7 +216,7 @@ export function PublicOrder() {
               </div>
               {inCart > 0 ? (
                 <div className="stepper">
-                  <button onClick={() => addToCart(it.id, -1)}>{inCart <= 1 ? '🗑️' : '−'}</button>
+                  <button onClick={() => addToCart(it.id, -1)} aria-label={inCart <= 1 ? 'Remove from cart' : 'Decrease quantity'}>{inCart <= 1 ? <IconTrash size={15} /> : '−'}</button>
                   <span className="qty-val">{inCart}</span>
                   <button onClick={() => addToCart(it.id, 1)}>+</button>
                 </div>
@@ -230,7 +233,7 @@ export function PublicOrder() {
           <div className="cb-count">{totals.count} {totals.count === 1 ? 'item ready' : 'items ready'}</div>
           <div className="cb-total">{inr(totals.totalP)}</div>
         </div>
-        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={place}>{sending ? 'Placing…' : 'Place order ➤'}</button>
+        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={place}>{sending ? 'Placing…' : 'Place order'}</button>
       </div>
       {!online && totals.count > 0 && (
         <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--bad)', paddingBottom: 90 }}>

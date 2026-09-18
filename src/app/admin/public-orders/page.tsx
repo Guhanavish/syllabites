@@ -5,7 +5,7 @@ import { api } from '@/lib/client'
 import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import { toast } from '@/lib/ui'
 import { Crumbs } from '@/components/site-chrome'
-import { IconSearch, IconBack, IconRefresh } from '@/components/icons'
+import { IconSearch, IconBack, IconRefresh, IconReceipt } from '@/components/icons'
 
 export default function PublicOrdersPage() {
   const [orders, setOrders] = useState<any[]>([])
@@ -85,7 +85,7 @@ export default function PublicOrdersPage() {
               <div className="skel skel-row" /><div className="skel skel-row" />
             </>
           ) : !filtered.length ? (
-            <div className="empty"><span className="e-ico" role="img" aria-label="Ticket">🎟️</span><h3>No orders</h3><p>Public orders placed at the entrance appear here.</p></div>
+            <div className="empty"><span className="e-ico" aria-hidden="true"><IconReceipt size={24} /></span><h3>No orders</h3><p>Public orders placed at the entrance appear here.</p></div>
           ) : (
             <>
               {filtered.slice(0, visible).map((o:any)=>(
@@ -100,7 +100,7 @@ export default function PublicOrdersPage() {
               </div>
               <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: '10px 12px', marginTop: 10, fontSize: 12, fontWeight: 600 }}>
                 <div><b>Name:</b> {o.customerName} · <b>Class:</b> {o.customerClass} · <b>Section:</b> {o.customerSection} · <b>Event:</b> {o.eventName}</div>
-                {o.isDiscounted && <div style={{ color: 'var(--ok)', fontWeight: 800, marginTop: 4 }}>🎉 {o.discountPercent}% OFF, saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)})</div>}
+                {o.isDiscounted && <div style={{ color: 'var(--ok)', fontWeight: 800, marginTop: 4 }}>{o.discountPercent}% OFF, saved {inr(o.discountAmount)} (orig {inr(o.originalTotal)})</div>}
               </div>
               <div className="order-items" style={{ marginTop: 10 }}>
                 {o.items?.map((li:any,ix:number)=>(
@@ -109,7 +109,7 @@ export default function PublicOrdersPage() {
               </div>
               {o.status==='placed' && (
                 <div className="order-actions" style={{ marginTop: 10 }}>
-                  <button className="btn ok" onClick={()=>updateStatus(o,'completed')}>✓ Served</button>
+                  <button className="btn ok" onClick={()=>updateStatus(o,'completed')}>Mark served</button>
                   <button className="btn sm soft-bad" onClick={()=>updateStatus(o,'cancelled')}>Cancel</button>
                 </div>
               )}

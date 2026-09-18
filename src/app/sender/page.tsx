@@ -1,14 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { db, fetchMenu } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { MenuItem, Order } from '@/lib/fmt'
-import { toast, buzz, chime, confirmBox, useOnline } from '@/lib/ui'
+import { toast, buzz, chime, confirmBox, useOnline, every, lockGate } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
-import { IconMenu, IconReceipt, IconSearch, IconDoor } from '@/components/icons'
+import { IconMenu, IconReceipt, IconSearch, IconDoor, IconBox, IconTrash, IconCheck, IconLock } from '@/components/icons'
 
 type Cart = Record<string, number>
 
@@ -72,9 +72,9 @@ export default function SenderPage() {
     tokensRef.current = loadTokens()
     Promise.all([loadMenu(), loadMine()]).then(() => setLoaded(true))
     const hb = startDeviceHeartbeat(section, 'sender')
-    // safety-net sync every 8s (covers missed live events)
-    const p = setInterval(() => { loadMenu(); loadMine() }, 8000)
-    return () => { hb(); clearInterval(p) }
+    // safety-net sync every 8s (covers missed live events, jittered per device)
+    const stopPoll = every(8000, () => { loadMenu(); loadMine() })
+    return () => { hb(); stopPoll() }
   }, [section, loadMenu, loadMine, loadTokens])
 
   /* clamp cart to reality whenever menu loads */
@@ -172,9 +172,20 @@ export default function SenderPage() {
     router.push('/')
   }
 
+  /* The Welcome hub only renders while the gate is locked, so going
+     there re-locks this device. Section, role, cart and tokens stay. */
+  function goWelcome() {
+    buzz(10)
+    lockGate()
+    router.push('/')
+  }
+
   /* ---------- render helpers ---------- */
-  const filtered = items.filter(
-    (i) => i.available !== false && (cat === 'All' || i.category === cat) && (!q || i.name.toLowerCase().includes(q.toLowerCase()))
+  const filtered = useMemo(
+    () => items.filter(
+      (i) => i.available !== false && (cat === 'All' || i.category === cat) && (!q || i.name.toLowerCase().includes(q.toLowerCase()))
+    ),
+    [items, cat, q]
   )
   const activeN = mine.filter((o) => o.status === 'placed').length
 
@@ -191,6 +202,7 @@ export default function SenderPage() {
         <button className="icon-btn" onClick={() => setTab('orders')} aria-label="My orders">
           <IconReceipt size={20} />{activeN > 0 && <span className="dot-badge">{activeN}</span>}
         </button>
+        <button className="icon-btn" onClick={goWelcome} aria-label="Go to Welcome page"><IconLock size={18} /></button>
         <button className="icon-btn" onClick={switchUser} aria-label="Switch user"><IconDoor size={19} /></button>
       </header>
 
@@ -214,7 +226,7 @@ export default function SenderPage() {
               </>
             ) : filtered.length === 0 ? (
               <div className="empty">
-                <span className="e-ico">{q || cat !== 'All' ? '🔍' : '🍳'}</span>
+                <span className="e-ico" aria-hidden="true">{q || cat !== 'All' ? <IconSearch size={24} /> : <IconBox size={24} />}</span>
                 <h3>{q || cat !== 'All' ? 'Nothing found' : 'Menu coming soon'}</h3>
                 <p>{q || cat !== 'All' ? <>Try a different search or category.</> : <>The kitchen hasn&apos;t added any items yet.<br />Check back in a bit!</>}</p>
               </div>
@@ -233,7 +245,7 @@ export default function SenderPage() {
                   </div>
                   {inCart > 0 ? (
                     <div className="stepper">
-                      <button onClick={() => addToCart(it.id, -1)}>{inCart <= 1 ? '🗑️' : '−'}</button>
+                      <button onClick={() => addToCart(it.id, -1)} aria-label={inCart <= 1 ? 'Remove from cart' : 'Decrease quantity'}>{inCart <= 1 ? <IconTrash size={15} /> : '−'}</button>
                       <span className="qty-val">{inCart}</span>
                       <button disabled={inCart >= 50 || inCart >= it.stock} onClick={() => addToCart(it.id, +1)}>+</button>
                     </div>
@@ -253,7 +265,7 @@ export default function SenderPage() {
             </>
           ) : mine.length === 0 ? (
             <div className="empty">
-              <span className="e-ico" role="img" aria-label="Receipt">🧾</span>
+              <span className="e-ico" aria-hidden="true"><IconReceipt size={24} /></span>
               <h3>No orders yet</h3>
               <p>Food you send will appear here<br />with its order code.</p>
               <button className="btn btn-primary" onClick={() => setTab('menu')}>Browse menu</button>
@@ -263,7 +275,7 @@ export default function SenderPage() {
               <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`} style={{ marginBottom: 12 }}>
                 <div className="order-head">
                   <div className="token-chip"
-                    style={o.status === 'completed' ? { background: 'linear-gradient(135deg,#22c55e,#15803d)' } : o.status === 'cancelled' ? { background: 'var(--bad)' } : undefined}>
+                    style={o.status === 'completed' ? { background: 'var(--ok)' } : o.status === 'cancelled' ? { background: 'var(--bad)' } : undefined}>
                     <span className="tk-lbl">ORDER</span><span className="tk-no">{ordNo(o)}</span>
                   </div>
                   <div className="order-title">
@@ -289,7 +301,7 @@ export default function SenderPage() {
                 </div>
                 {o.status === 'completed' && (
                   <div style={{ background: 'var(--ok-tint)', color: 'var(--ok)', borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 800, marginTop: 11 }}>
-                    ✓ Served, enjoy your food!
+                    Served — enjoy your food.
                   </div>
                 )}
                 {o.status === 'cancelled' && (
@@ -314,7 +326,7 @@ export default function SenderPage() {
           <div className="cb-count">{totals.count} {totals.count === 1 ? 'item ready' : 'items ready'}</div>
           <div className="cb-total">{inr(totals.totalP)}</div>
         </div>
-        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={sendOrder}>{sending ? 'Sending…' : 'Send ➤'}</button>
+        <button className="go" disabled={sending || !online} title={!online ? "Can't reach the server, check your internet connection" : undefined} onClick={sendOrder}>{sending ? 'Sending…' : 'Send order'}</button>
       </div>
       {!online && totals.count > 0 && tab === 'menu' && (
         <div style={{ position: 'absolute', left: 14, right: 14, bottom: 'calc(var(--nav-h) + var(--sab) + 76px)', zIndex: 15, textAlign: 'center', fontSize: 12, fontWeight: 800, color: 'var(--bad)' }}>
@@ -335,7 +347,7 @@ export default function SenderPage() {
       {justSent && (
         <div className="success-wrap" role="alertdialog" aria-label="Order confirmed">
           <div className="success-card">
-            <div className="check-circle"><span>✓</span></div>
+            <div className="check-circle"><span><IconCheck size={30} /></span></div>
             <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order sent!</h2>
             <div className="success-token">{ordNo(justSent)}</div>
             <p className="success-sub">

@@ -32,7 +32,7 @@ export function clockTime(ts: string): string {
 
 export const STATUS_META: Record<string, { label: string; cls: string }> = {
   placed: { label: 'Sent', cls: 'bp-placed pulse' },
-  completed: { label: 'Served \u2713', cls: 'bp-completed' },
+  completed: { label: 'Served', cls: 'bp-completed' },
   cancelled: { label: 'Cancelled', cls: 'bp-cancelled' },
 }
 export function statusPill(status: string): string {

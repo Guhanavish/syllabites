@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/client'
 import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
-import { toast } from '@/lib/ui'
+import { toast, every } from '@/lib/ui'
 import type { Stats } from './types'
 import { IconSearch, IconRefresh } from '@/components/icons'
 
@@ -17,8 +17,8 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
 
   useEffect(() => { load(range) }, [range, load])
   useEffect(() => {
-    const p = setInterval(() => load(range), 15000)
-    return () => clearInterval(p)
+    const stop = every(15000, () => load(range))
+    return () => stop()
   }, [range, load])
 
   if (!s) return <div><div className="skel skel-row" /><div className="skel skel-row" /></div>
@@ -43,66 +43,80 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
 
       {/* Active devices, 4 fully individual counters */}
       <div className="card pad" style={{ marginBottom: 14, border: '1px solid var(--line)' }}>
-        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>📱 Active devices (last 2 min), each counter separate</div>
+        <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Active devices (last 2 min), each counter separate</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #DBEAFE' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>👦 BOYS · SENDER</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>BOYS · SENDER</div>
             <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#1E3A8A' }}>{dev.boys.sender}</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6' }}>ordering phones</div>
           </div>
           <div style={{ background: '#EFF6FF', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #BFDBFE' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>👦 BOYS · RECEIVER</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#1D4ED8', letterSpacing: '.04em' }}>BOYS · RECEIVER</div>
             <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#1E3A8A' }}>{dev.boys.receiver}</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#3B82F6' }}>counter screens</div>
           </div>
           <div style={{ background: '#FDF2F8', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #FBCFE8' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>👧 GIRLS · SENDER</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>GIRLS · SENDER</div>
             <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#831843' }}>{dev.girls.sender}</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#EC4899' }}>ordering phones</div>
           </div>
           <div style={{ background: '#FDF2F8', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #F9A8D4' }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>👧 GIRLS · RECEIVER</div>
+            <div style={{ fontSize: 11, fontWeight: 800, color: '#BE185D', letterSpacing: '.04em' }}>GIRLS · RECEIVER</div>
             <div style={{ fontSize: 26, fontWeight: 900, marginTop: 4, color: '#831843' }}>{dev.girls.receiver}</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#EC4899' }}>counter screens</div>
           </div>
         </div>
         <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 10, fontSize: 11, fontWeight: 700, color: 'var(--muted)' }}>
-          <span>👦 Boys total: {dev.boys.total}</span>
+          <span>Boys total: {dev.boys.total}</span>
           <span>·</span>
-          <span>👧 Girls total: {dev.girls.total}</span>
+          <span>Girls total: {dev.girls.total}</span>
           <span>·</span>
           <span>All: {dev.total}</span>
         </div>
       </div>
       <div className="kpi-grid">
         <div className="kpi wide">
-          <div className="k-lbl">💰 Total sales · {rangeLbl}</div>
+          <div className="k-lbl">Total sales · {rangeLbl}</div>
           <div className="k-val">{inr(s.revenue)}</div>
           <div className="k-sub">{s.orders} order{s.orders === 1 ? '' : 's'}{avg ? ` · avg ${inr(avg)}` : ''}</div>
         </div>
-        <div className="kpi"><div className="k-lbl">🧾 Orders</div><div className="k-val">{s.orders}</div></div>
-        <div className="kpi"><div className="k-lbl">🍱 Items sold</div><div className="k-val">{s.totalSold}</div></div>
-        <div className="kpi"><div className="k-lbl">👦 Boys</div><div className="k-val">{inr(b.revenue)}</div><div className="k-sub">{b.orders} orders</div></div>
-        <div className="kpi"><div className="k-lbl">👧 Girls</div><div className="k-val">{inr(g.revenue)}</div><div className="k-sub">{g.orders} orders</div></div>
-        <div className="kpi"><div className="k-lbl">🚫 Cancelled</div><div className="k-val">{s.cancelled}</div></div>
-        <div className="kpi"><div className="k-lbl">⚠️ Low stock</div><div className="k-val">{s.lowStock.length}</div></div>
-        <div className="kpi"><div className="k-lbl">📦 Parcel sales</div><div className="k-val">{inr(s.parcelRevenue ?? 0)}</div><div className="k-sub">{s.parcelOrders ?? s.publicOrders ?? 0} orders · isolated</div></div>
-        <div className="kpi"><div className="k-lbl">📦 Parcel low</div><div className="k-val">{(s.parcelLowStock ?? []).length}</div></div>
+        <div className="kpi"><div className="k-lbl">Orders</div><div className="k-val">{s.orders}</div></div>
+        <div className="kpi"><div className="k-lbl">Items sold</div><div className="k-val">{s.totalSold}</div></div>
+        <div className="kpi"><div className="k-lbl">Boys</div><div className="k-val">{inr(b.revenue)}</div><div className="k-sub">{b.orders} orders</div></div>
+        <div className="kpi"><div className="k-lbl">Girls</div><div className="k-val">{inr(g.revenue)}</div><div className="k-sub">{g.orders} orders</div></div>
+        <div className="kpi"><div className="k-lbl">Cancelled</div><div className="k-val">{s.cancelled}</div></div>
+        <div className="kpi"><div className="k-lbl">Low stock</div><div className="k-val">{s.lowStock.length}</div></div>
+        <div className="kpi"><div className="k-lbl">Parcel sales</div><div className="k-val">{inr(s.parcelRevenue ?? 0)}</div><div className="k-sub">{s.parcelOrders ?? s.publicOrders ?? 0} orders · isolated</div></div>
+        <div className="kpi"><div className="k-lbl">Parcel low stock</div><div className="k-val">{(s.parcelLowStock ?? []).length}</div></div>
       </div>
 
       <div className="card pad split-card" style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 10 }}>Revenue split</div>
         <div className="split-head">
-          <span className="bh-boys">👦 Boys {bp}%</span>
-          <span className="bh-girls">{100 - bp}% Girls 👧</span>
+          <span className="bh-boys">Boys {bp}%</span>
+          <span className="bh-girls">{100 - bp}% Girls</span>
         </div>
         <div className="split-track">
           <span className="b-boys" style={{ width: `${bp}%` }} />
           <span className="b-girls" style={{ width: `${100 - bp}%` }} />
         </div>
         <div className="split-legend">
-          <span><span className="dot" style={{ background: '#2458d0' }} />{inr(b.revenue)}</span>
-          <span><span className="dot" style={{ background: '#d42e75' }} />{inr(g.revenue)}</span>
+          <span><span className="dot" style={{ background: '#2563eb' }} />{inr(b.revenue)}</span>
+          <span><span className="dot" style={{ background: '#e11d48' }} />{inr(g.revenue)}</span>
+        </div>
+        <div className="donut-wrap" role="img" aria-label={`Revenue split: Boys ${bp} percent, Girls ${100 - bp} percent`}>
+          <svg className="donut-svg" width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
+            <circle cx="42" cy="42" r="34" fill="none" stroke="var(--bg-soft)" strokeWidth="12" />
+            <circle cx="42" cy="42" r="34" fill="none" stroke="#e11d48" strokeWidth="12" strokeLinecap="round"
+              strokeDasharray={`${(((100 - bp) / 100) * 213.6).toFixed(1)} 213.6`} className="donut-arc" />
+            <circle cx="42" cy="42" r="34" fill="none" stroke="#2563eb" strokeWidth="12" strokeLinecap="round"
+              strokeDasharray={`${((bp / 100) * 213.6).toFixed(1)} 213.6`}
+              strokeDashoffset={`${(-((100 - bp) / 100) * 213.6).toFixed(1)}`} className="donut-arc" />
+          </svg>
+          <div className="donut-legend">
+            <span><span className="dot" style={{ background: '#2563eb' }} />Boys <b>{bp}%</b></span>
+            <span><span className="dot" style={{ background: '#e11d48' }} />Girls <b>{100 - bp}%</b></span>
+          </div>
         </div>
       </div>
 
@@ -112,7 +126,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
           <div className="rank-list">
             {s.topItems.map((t, i) => (
               <div key={t.name} className="rank-row">
-                <span className="rank-no">{['🥇', '🥈', '🥉'][i] || '#' + (i + 1)}</span>
+                <span className="rank-no">{i + 1}</span>
                 <div className="rank-main">
                   <div className="rank-line">
                     <span>{t.emoji || ''} {t.name}</span>
@@ -130,7 +144,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
 
       {s.lowStock.length > 0 && (
         <>
-          <div className="divider-label">⚠️ Needs restocking (staff)</div>
+          <div className="divider-label">Needs restocking (staff)</div>
           <div className="card pad">
             {s.lowStock.map((it) => (
               <div key={it.id} className="alert-row">
@@ -147,7 +161,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
 
       {(s.parcelLowStock ?? []).length > 0 && (
         <>
-          <div className="divider-label">📦 Parcel needs restocking</div>
+          <div className="divider-label">Parcel needs restocking</div>
           <div className="card pad">
             {(s.parcelLowStock ?? []).map((it) => (
               <div key={it.id} className="alert-row">
@@ -162,7 +176,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         </>
       )}
 
-      <div className="divider-label">🎟️ Public orders</div>
+      <div className="divider-label">Public orders</div>
       <PublicOrdersCard />
     </>
   )
@@ -178,7 +192,7 @@ function PublicOrdersCard() {
       setOrders(Array.isArray(data) ? data : [])
     } catch (e: any) { setErr(e.message || 'Could not load') }
   }, [])
-  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t) }, [load])
+  useEffect(() => { load(); const stop = every(15000, () => load()); return () => stop() }, [load])
   const filtered = orders.filter((o: any) => {
     if (!q.trim()) return true
     const s = `${o.code} ${o.id}`.toLowerCase()
@@ -195,7 +209,7 @@ function PublicOrdersCard() {
   return (
     <div className="card pad" style={{ marginTop: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 900 }}>🎟️ Public orders (code-only, admin view)</div>
+        <div style={{ fontSize: 13, fontWeight: 900 }}>Public orders (code-only, admin view)</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn sm ghost" onClick={load}><IconRefresh size={15} /> Refresh</button>
           <a href="/admin/public-orders" className="btn sm ghost" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>View →</a>
@@ -234,7 +248,7 @@ function PublicOrdersCard() {
               </div>
               {o.status === 'placed' && (
                 <div className="order-actions" style={{ marginTop: 10 }}>
-                  <button className="btn ok" onClick={() => updateStatus(o, 'completed')}>✓ Served</button>
+                  <button className="btn ok" onClick={() => updateStatus(o, 'completed')}>Mark served</button>
                   <button className="btn sm soft-bad" style={{ flex: '0 0 auto' }} onClick={() => updateStatus(o, 'cancelled')}>Cancel</button>
                 </div>
               )}

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/client'
 import { inr } from '@/lib/fmt'
 import type { MenuItem } from '@/lib/fmt'
-import { toast, buzz, openSheet, closeSheet, confirmBox } from '@/lib/ui'
-import { IconSearch, IconPlus, IconTrash, IconEdit } from '@/components/icons'
+import { toast, buzz, openSheet, closeSheet, confirmBox, every } from '@/lib/ui'
+import { IconSearch, IconPlus, IconTrash, IconEdit, IconBox } from '@/components/icons'
 
 const EMOJIS = ['🍽️', '🍛', '🍜', '🍕', '🍔', '🍟', '🌮', '🥪', '🥟', '🍗', '🥗', '🍚', '🫓', '🥞', '🍩', '🍪', '🍰', '🍦', '🍫', '☕', '🧋', '🥤', '🍿', '🍤', '🍳', '🧆', '🌯', '🥐']
 
@@ -24,8 +24,8 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
 
   useEffect(() => { setLoading(true); load() }, [load])
   useEffect(() => {
-    const p = setInterval(load, 15000)
-    return () => clearInterval(p)
+    const stop = every(15000, () => load())
+    return () => stop()
   }, [load])
 
   const list = items.filter((i) =>
@@ -41,7 +41,7 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
         titleSuffix={mode === 'parcel' ? ' (parcel)' : ''}
         onSaved={() => {
           closeSheet(); buzz(15)
-          toast(item ? 'Item updated ✓' : 'Item added to menu ✓', 'ok')
+          toast(item ? 'Item updated' : 'Item added to menu', 'ok')
           load()
         }}
       />
@@ -82,7 +82,7 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
     if (!ok) return
     try {
       const r = await api<{ copied: number }>('/api/parcel/items/copy', { method: 'POST' })
-      toast(`Parcel menu updated (${r.copied} items) ✓`, 'ok')
+      toast(`Parcel menu updated (${r.copied} items)`, 'ok')
       load()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -90,15 +90,15 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
   return (
     <>
       <div className="range-seg" style={{ marginBottom: 12 }}>
-        <button className={mode === 'staff' ? 'on' : ''} onClick={() => setMode('staff')}>👦👧 Staff menu</button>
-        <button className={mode === 'parcel' ? 'on' : ''} onClick={() => setMode('parcel')}>📦 Parcel menu</button>
+        <button className={mode === 'staff' ? 'on' : ''} onClick={() => setMode('staff')}>Staff menu</button>
+        <button className={mode === 'parcel' ? 'on' : ''} onClick={() => setMode('parcel')}>Parcel menu</button>
       </div>
       {mode === 'parcel' && (
         <div className="card pad" style={{ marginBottom: 12, background: 'var(--bg-soft)' }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--muted)' }}>
             Parcel has its own menu + stock. Staff orders never touch parcel stock and parcel orders never touch staff stock.
           </div>
-          <button className="btn btn-ghost sm" style={{ marginTop: 8 }} onClick={copyStaffToParcel}>⧉ Copy staff menu to parcel</button>
+          <button className="btn btn-ghost sm" style={{ marginTop: 8 }} onClick={copyStaffToParcel}>Copy staff menu to parcel</button>
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -115,10 +115,10 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
         </>
       ) : !list.length ? (
         <div className="empty">
-          <span className="e-ico" role="img" aria-label="Plate">🍽️</span>
+          <span className="e-ico" aria-hidden="true"><IconBox size={24} /></span>
           <h3>No items yet</h3>
           <p>Add your first food item to open the counter.<br />Only you (admin) can add or change items.</p>
-          <button className="btn btn-primary" onClick={() => sheet(null)}>＋ Add first item</button>
+          <button className="btn btn-primary" onClick={() => sheet(null)}>Add first item</button>
         </div>
       ) : (
         list.map((it) => (

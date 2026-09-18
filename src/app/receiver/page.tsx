@@ -6,9 +6,9 @@ import { db } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { Order } from '@/lib/fmt'
-import { toast, buzz, chime, confirmBox } from '@/lib/ui'
+import { toast, buzz, chime, confirmBox, every, lockGate } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
-import { IconReceipt, IconBox, IconCheck, IconSearch, IconBell, IconBellOff, IconDoor } from '@/components/icons'
+import { IconReceipt, IconBox, IconCheck, IconSearch, IconBell, IconBellOff, IconDoor, IconLock } from '@/components/icons'
 
 type Board = {
   active: Order[]
@@ -74,7 +74,7 @@ export default function ReceiverPage() {
       b.active.forEach((o) => seenIds.current.add(o.id))
       if (!firstLoad.current && fresh.length && (isNewEvent || soundOn)) {
         chime(); buzz([60, 80, 60])
-        toast(`🔥 New order ${ordNo(fresh[0])}!`, '', 3200)
+        toast(`New order ${ordNo(fresh[0])}`, '', 3200)
       }
       firstLoad.current = false
       setLoaded(true)
@@ -89,8 +89,8 @@ export default function ReceiverPage() {
     if (!section) return
     load()
     const hb = startDeviceHeartbeat(section, 'receiver')
-    const p = setInterval(() => load(), 10000) // fallback; realtime is primary
-    return () => { hb(); clearInterval(p) }
+    const p = every(10000, () => load()) // fallback; realtime is primary
+    return () => { hb(); p() }
   }, [section, load])
 
   /* ---------- parcel loader (entrance orders, price-blind) ---------- */
@@ -102,7 +102,7 @@ export default function ReceiverPage() {
       b.active.forEach((o) => seenParcel.current.add(o.id))
       if (!firstParcelLoad.current && fresh.length && (isNewEvent || soundOn)) {
         chime(); buzz([60, 80, 60])
-        toast(`📦 New parcel order ${fresh[0].code}!`, '', 3200)
+        toast(`New parcel order ${fresh[0].code}`, '', 3200)
       }
       firstParcelLoad.current = false
       setParcelLoaded(true)
@@ -115,8 +115,8 @@ export default function ReceiverPage() {
 
   useEffect(() => {
     loadParcel()
-    const t = setInterval(() => loadParcel(), 10000)
-    return () => clearInterval(t)
+    const t = every(10000, () => loadParcel())
+    return () => t()
   }, [loadParcel])
 
   /* ---------- realtime ---------- */
@@ -142,7 +142,7 @@ export default function ReceiverPage() {
       if (res?.alreadyCompleted) {
         toast(`Order ${code} was already served by another staff`, '')
       } else {
-        toast(`${code} served ✓`, 'ok')
+        toast(`${code} served`, 'ok')
       }
       load()
     } catch (e: any) {
@@ -179,7 +179,7 @@ export default function ReceiverPage() {
       if (res?.alreadyCompleted) {
         toast(`Parcel ${o.code} was already served by another counter`, '')
       } else {
-        toast(`Parcel ${o.code} served ✓`, 'ok')
+        toast(`Parcel ${o.code} served`, 'ok')
       }
       loadParcel()
     } catch (e: any) {
@@ -220,6 +220,14 @@ export default function ReceiverPage() {
     })
   }
 
+  /* The Welcome hub only renders while the gate is locked, so going
+     there re-locks this device. Section, role and sound stay. */
+  function goWelcome() {
+    buzz(10)
+    lockGate()
+    router.push('/')
+  }
+
   const [search, setSearch] = useState('')
   const waiting = board.active.length
   const parcelWaiting = parcel.active.length
@@ -248,6 +256,7 @@ export default function ReceiverPage() {
           <div className="sub"><span className="live-dot" /> Live orders</div>
         </div>
         <button className="icon-btn" onClick={toggleSound} aria-label="Sound">{soundOn ? <IconBell size={19} /> : <IconBellOff size={19} />}</button>
+        <button className="icon-btn" onClick={goWelcome} aria-label="Go to Welcome page"><IconLock size={18} /></button>
         <button className="icon-btn" onClick={switchUser} aria-label="Switch user"><IconDoor size={19} /></button>
       </header>
 
@@ -286,9 +295,9 @@ export default function ReceiverPage() {
                 <div className="skel skel-row" /><div className="skel skel-row" />
               </>
             ) : parcelError && parcelList.length === 0 ? (
-              <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{parcelError}</p><button className="btn btn-primary" onClick={() => loadParcel()}>Try again</button></div>
+              <div className="empty"><span className="e-ico" aria-hidden="true"><IconBell size={24} /></span><h3>Connection issue</h3><p>{parcelError}</p><button className="btn btn-primary" onClick={() => loadParcel()}>Try again</button></div>
             ) : parcelList.length === 0 ? (
-              <div className="empty"><span className="e-ico" role="img" aria-label="Parcel box">📦</span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
+              <div className="empty"><span className="e-ico" aria-hidden="true"><IconBox size={24} /></span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
             ) : (
               parcelList.map((o) => (
                 <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
@@ -302,7 +311,7 @@ export default function ReceiverPage() {
                         {timeAgo(o.createdAt)} · {clockTime(o.createdAt)}
                       </div>
                     </div>
-                    <span className="badge-pill" style={{ background: 'var(--bg-soft)', color: 'var(--ink)' }}>📦</span>
+                    <span className="badge-pill" style={{ background: 'var(--bg-soft)', color: 'var(--ink)' }}>Parcel</span>
                   </div>
                   <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: '8px 12px', marginTop: 10, fontSize: 12, fontWeight: 600 }}>
                     {o.customerName} · {o.customerClass} · {o.customerSection} · {o.eventName}
@@ -318,7 +327,7 @@ export default function ReceiverPage() {
                   {o.status === 'placed' && (
                     <div className="order-actions">
                       <button className="btn ok" disabled={pendingParcel.has(o.id)} onClick={() => serveParcel(o)}>
-                        {pendingParcel.has(o.id) ? 'Serving…' : '✓ Served · handed over'}
+                        {pendingParcel.has(o.id) ? 'Serving…' : 'Mark served'}
                       </button>
                       <button className="btn sm soft-bad" style={{ flex: '0 0 auto', padding: '0 16px' }} onClick={() => cancelParcel(o)}>Cancel</button>
                     </div>
@@ -327,12 +336,12 @@ export default function ReceiverPage() {
               ))
             )
           ) : error && !list.length ? (
-            <div className="empty"><span className="e-ico" role="img" aria-label="Antenna">📡</span><h3>Connection issue</h3><p>{error}</p><button className="btn btn-primary" onClick={() => load()}>Try again</button></div>
+            <div className="empty"><span className="e-ico" aria-hidden="true"><IconBell size={24} /></span><h3>Connection issue</h3><p>{error}</p><button className="btn btn-primary" onClick={() => load()}>Try again</button></div>
           ) : list.length === 0 ? (
             tab === 'new' ? (
-              <div className="empty"><span className="e-ico" role="img" aria-label="Mailbox">📭</span><h3>All caught up</h3><p>New orders will pop in here<br />with a sound alert.</p></div>
+              <div className="empty"><span className="e-ico" aria-hidden="true"><IconReceipt size={24} /></span><h3>All caught up</h3><p>New orders will pop in here<br />with a sound alert.</p></div>
             ) : (
-              <div className="empty"><span className="e-ico" role="img" aria-label="Check mark">✅</span><h3>Nothing served yet</h3><p>Orders you mark as served<br />today show up here.</p></div>
+              <div className="empty"><span className="e-ico" aria-hidden="true"><IconCheck size={24} /></span><h3>Nothing served yet</h3><p>Orders you mark as served<br />today show up here.</p></div>
             )
           ) : (
             <>
@@ -365,7 +374,7 @@ export default function ReceiverPage() {
                 {o.status === 'placed' && (
                   <div className="order-actions">
                     <button className="btn ok" disabled={pendingIds.has(o.id)} onClick={() => serve(o)}>
-                      {pendingIds.has(o.id) ? 'Serving…' : '✓ Served · handed over'}
+                      {pendingIds.has(o.id) ? 'Serving…' : 'Mark served'}
                     </button>
                     <button className="btn sm soft-bad" style={{ flex: '0 0 auto', padding: '0 16px' }} onClick={() => cancelOrder(o)}>Cancel</button>
                   </div>

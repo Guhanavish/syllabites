@@ -31,6 +31,32 @@ export function getToasts() { return toasts }
 export function getSheet() { return sheet }
 export function getConfirm() { return confirmState }
 
+/* Jittered poller: same cadence as setInterval, but each device drifts on
+   its own schedule so hundreds of phones never hammer the server in the
+   same millisecond (thundering-herd guard). Skips hidden tabs. Returns
+   a cleanup for useEffect. First tick fires after one jittered period;
+   callers keep their immediate load() for first paint. */
+export function every(ms: number, fn: () => void) {
+  let alive = true
+  let t: ReturnType<typeof setTimeout> | undefined
+  const tick = () => {
+    if (!alive) return
+    if (typeof document === 'undefined' || !document.hidden) {
+      try { fn() } catch {}
+    }
+    t = setTimeout(tick, ms * (0.85 + Math.random() * 0.3))
+  }
+  t = setTimeout(tick, ms * (0.85 + Math.random() * 0.3))
+  return () => { alive = false; if (t) clearTimeout(t) }
+}
+
+/* Re-lock the gate so the Welcome hub renders again. Section, role,
+   cart and tokens stay in storage; only the gate pass is forgotten. */
+export function lockGate() {
+  try { localStorage.removeItem('fc.gate') } catch {}
+  try { window.dispatchEvent(new Event('fc:lock')) } catch {}
+}
+
 export function toast(msg: string, kind: '' | 'ok' | 'bad' = '', ms = 2600) {
   const t: Toast = { id: Date.now() + Math.random(), msg, kind }
   toasts = [...toasts, t]

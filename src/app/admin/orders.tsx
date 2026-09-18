@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { Order } from '@/lib/fmt'
-import { toast, confirmBox } from '@/lib/ui'
+import { toast, confirmBox, every } from '@/lib/ui'
+import { IconReceipt } from '@/components/icons'
 
 export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
   const [section, setSection] = useState('all')
@@ -25,8 +26,8 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
 
   useEffect(() => { setLoading(true); setVisible(15); load(section, status, today) }, [section, status, today, load])
   useEffect(() => {
-    const p = setInterval(() => load(section, status, today), 15000)
-    return () => clearInterval(p)
+    const stop = every(15000, () => load(section, status, today))
+    return () => stop()
   }, [section, status, today, load])
 
   async function cancelOrder(o: Order) {
@@ -65,7 +66,7 @@ export function OrdersTab({ expired }: { expired: (e: any) => boolean }) {
         </>
       ) : !orders.length ? (
         <div className="empty">
-          <span className="e-ico" role="img" aria-label="Receipt">🧾</span><h3>No orders found</h3><p>Try changing the filters above.</p>
+          <span className="e-ico" aria-hidden="true"><IconReceipt size={24} /></span><h3>No orders found</h3><p>Try changing the filters above.</p>
         </div>
       ) : (
         <>

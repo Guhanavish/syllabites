@@ -28,7 +28,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     if (!name) return
     try {
       await api('/api/admin/username', { method: 'POST', body: { newUsername: name } })
-      toast(`Username changed to "${name}" ✓`, 'ok')
+      toast(`Username changed to "${name}"`, 'ok')
       e.currentTarget.reset()
     } catch (ex: any) {
       if (isSessionExpired(ex)) { expired(ex); return }
@@ -54,7 +54,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     const pw = String(new FormData(e.currentTarget).get('spw') || '')
     try {
       await api('/api/admin/section-password', { method: 'POST', body: { section, newPassword: pw } })
-      toast(`${section === 'boys' ? 'Boys' : 'Girls'} password updated ✓`, 'ok')
+      toast(`${section === 'boys' ? 'Boys' : 'Girls'} password updated`, 'ok')
       e.currentTarget.reset()
     } catch (ex: any) {
       if (isSessionExpired(ex)) { expired(ex); return }
@@ -70,7 +70,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   async function startOffer() {
     try {
       const r = await api('/api/admin/offer/start', { method: 'POST' })
-      toast('Offer started, 3 lucky orders will get 5-10% off! 🎉', 'ok')
+      toast('Offer started: 3 lucky orders will get 5-10% off', 'ok')
       loadOffer()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -86,7 +86,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     if (nw !== nw2) { setErr("The two new passwords don't match"); return }
     try {
       await api('/api/password', { method: 'POST', body: { currentPassword: cur, newPassword: nw } })
-      toast('Password updated ✓', 'ok')
+      toast('Password updated', 'ok')
       e.currentTarget.reset()
     } catch (ex: any) {
       if (isSessionExpired(ex)) { expired(ex); return }
@@ -99,7 +99,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       const r = await api<{ backupId?: number; id?: number }>('/api/admin/backups/create', {
         method: 'POST', body: { label: 'Manual backup' },
       })
-      toast(`Backup #${r.backupId ?? r.id} saved on the server ✓`, 'ok')
+      toast(`Backup #${r.backupId ?? r.id} saved on the server`, 'ok')
       loadBackups()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -115,7 +115,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       const r = await api<{ backupId: number; backedUpItems: number; backedUpOrders: number }>('/api/admin/reset', {
         method: 'POST', body: { label: 'Fresh start' },
       })
-      toast(`Saved as backup #${r.backupId} (${r.backedUpItems} items, ${r.backedUpOrders} orders) then wiped ✓`, 'ok', 5000)
+      toast(`Saved as backup #${r.backupId} (${r.backedUpItems} items, ${r.backedUpOrders} orders) then wiped`, 'ok', 5000)
       loadBackups()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -206,18 +206,17 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
           5-10% off on 3 random orders out of 50 (6% chance). Only for entrance (public) orders. Click Start to activate.
         </p>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-          <button className="btn btn-primary" onClick={startOffer}>🚀 Start Offer (3/50)</button>
+          <button className="btn btn-primary" onClick={startOffer}>Start offer (3/50)</button>
           <button className="btn btn-ghost" onClick={loadOffer}>↻ Status</button>
         </div>
         {offer && (
           <div style={{ background: 'var(--bg-soft)', borderRadius: 12, padding: 12 }}>
-            <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? '🟢 Active' : '⚪ Inactive'} · Remaining: {offer.remaining} / 3</div>
+            <div style={{ fontSize: 13, fontWeight: 800 }}>Status: {offer.active ? 'Active' : 'Inactive'} · Remaining: {offer.remaining} / 3</div>
             {offer.discountedOrders?.length ? (
               <div style={{ marginTop: 10 }}>
                 <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>Discounted orders report:</div>
                 {offer.discountedOrders.map((d: any) => (
                   <div key={d.code} className="alert-row" style={{ padding: '8px 0' }}>
-                    <span className="alert-emoji">🎟️</span>
                     <span className="alert-name">
                       Code <b>{d.code}</b>, {d.customerName} ({d.customerClass}) · {d.discountPercent}% off
                       <br /><small style={{ color: 'var(--muted)' }}>{d.originalTotal ? `${((d.originalTotal)/100).toFixed(2)} → ${(d.total/100).toFixed(2)}` : ''} · Saved {d.discountAmount ? (d.discountAmount/100).toFixed(2) : ''}</small>

@@ -6,8 +6,20 @@ import { api } from '@/lib/client'
 import { toast } from '@/lib/ui'
 import { warmCritical } from '@/lib/db'
 import { BrandHero, Credits } from '@/components/brand'
-import { PublicOrder } from '@/components/PublicOrder'
+import dynamic from 'next/dynamic'
 import { IconBack, IconLock } from '@/components/icons'
+
+/* Split the parcel menu bundle off the first paint: it only mounts when
+   the visitor opens the Order tab, and shows skeletons while loading. */
+const PublicOrder = dynamic(() => import('@/components/PublicOrder').then((m) => m.PublicOrder), {
+  loading: () => (
+    <div>
+      <div className="skel skel-row" />
+      <div className="skel skel-row" />
+      <div className="skel skel-row" />
+    </div>
+  ),
+})
 
 type Mode = { kind: 'enter' } | { kind: 'reset' }
 
@@ -42,6 +54,13 @@ export function GateLock({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => { check(); warmCritical() }, [check])
+
+  /* Staff screens re-lock the device via lockGate() to jump to Welcome. */
+  useEffect(() => {
+    const lock = () => { setMode({ kind: 'enter' }); setErr(''); setGateTab('welcome'); setState('locked') }
+    window.addEventListener('fc:lock', lock)
+    return () => window.removeEventListener('fc:lock', lock)
+  }, [])
 
   function unlock(version: number) {
     localStorage.setItem('fc.gate', JSON.stringify({ v: version }))
@@ -145,6 +164,11 @@ export function GateLock({ children }: { children: ReactNode }) {
         </div>
       ) : (
         <div className="login-wrap">
+          <div className="gate-backrow">
+            <button className="admin-link" onClick={() => { setGateTab('welcome'); setMode({ kind: 'enter' }); setErr('') }}>
+              <IconBack size={15} /> Back to Welcome
+            </button>
+          </div>
           <div className="gate-lockmark" aria-hidden="true"><IconLock size={26} /></div>
           <h2 className="gate-heading">Syllabites staff access</h2>
           <p className="gate-lead">Enter the access password to continue</p>
@@ -168,4 +192,4 @@ export function GateLock({ children }: { children: ReactNode }) {
 }
 
 function buzzIn() { try { navigator.vibrate?.(20) } catch {} }
-function toastUnlock() { toast('Password updated ✓', 'ok') }
+function toastUnlock() { toast('Password updated', 'ok') }

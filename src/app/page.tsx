@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { buzz } from '@/lib/ui'
+import { buzz, lockGate } from '@/lib/ui'
 import { SiteFooter } from '@/components/site-chrome'
 import { BrandHero } from '@/components/brand'
 import { IconBack, IconLock, IconReceipt, IconBox, IconCheck } from '@/components/icons'
@@ -22,6 +22,11 @@ export default function Landing() {
   useEffect(() => {
     try { setSection(localStorage.getItem('fc.section') as Section) } catch {}
   }, [])
+
+  /* Warm the two role routes so the post-unlock jump paints instantly. */
+  useEffect(() => {
+    try { router.prefetch('/sender'); router.prefetch('/receiver') } catch {}
+  }, [router])
 
   function pick(s: 'boys' | 'girls') {
     buzz(10)
@@ -49,6 +54,14 @@ export default function Landing() {
     } catch (ex: any) {
       setPwdErr(ex.message || 'Wrong password')
     } finally { setPwdBusy(false) }
+  }
+
+  /* The Welcome hub only renders while the gate is locked, so going
+     there re-locks this device. Section and role stay. */
+  function goWelcome() {
+    buzz(10)
+    lockGate()
+    router.push('/')
   }
 
   async function go(role: 'sender' | 'receiver') {
@@ -152,7 +165,10 @@ export default function Landing() {
         </section>
       )}
 
-      <div className="landing-foot">
+      <div className="landing-foot" style={{ gap: 10, flexWrap: 'wrap' }}>
+        <button className="admin-link" onClick={goWelcome}>
+          <IconLock size={15} /> Welcome page
+        </button>
         <button className="admin-link" onClick={() => router.push('/admin')}>
           <IconLock size={15} /> Admin login
         </button>

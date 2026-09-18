@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* Never ship production source maps to browsers. */
   productionBrowserSourceMaps: false,
+  /* Drop the X-Powered-By header: fewer bytes on every response. */
+  poweredByHeader: false,
   /* Slimmer client bundles via per-module imports (build-time only). */
   experimental: {
     optimizePackageImports: [
