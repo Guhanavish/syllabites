@@ -224,13 +224,24 @@
     v_done     jsonb;
     v_count    int;
     v_revenue  bigint;
+    v_total    int;
   begin
     if p_section not in ('boys','girls') then raise exception 'Invalid counter'; end if;
 
-    select coalesce(jsonb_agg(order_full(o.id) order by o.id), '[]')
-      into v_active
+    -- Oldest-first window: keeps rush-hour payloads small while every open
+    -- order stays reachable (serving one reveals the next on refresh).
+    select count(*)::int into v_total
     from orders o
     where o.section = p_section and o.status = 'placed';
+
+    select coalesce(jsonb_agg(order_full(o.id) order by o.id), '[]')
+      into v_active
+    from (
+      select id from orders
+      where section = p_section and status = 'placed'
+      order by id asc limit 100
+    ) s
+    join orders o on o.id = s.id;
 
     select count(*)::int, coalesce(sum(o.total), 0)
       into v_count, v_revenue
@@ -250,6 +261,7 @@
 
     return jsonb_build_object(
       'active', v_active,
+      'activeCount', v_total,
       'doneToday', jsonb_build_object('count', v_count, 'revenue', v_revenue),
       'doneOrders', v_done
     );
@@ -1100,6 +1112,14 @@ end $$;
 
 update public_orders set original_total = total where original_total = 0;
 
+-- ---------- rush-hour fast path: partial indexes over open orders only,
+-- so the live boards never scan order history. (On a live database with
+-- traffic, prefer CREATE INDEX CONCURRENTLY to avoid locking writes.)
+create index if not exists idx_orders_placed_board
+  on orders (section, created_day, id) where status = 'placed';
+create index if not exists idx_public_orders_placed
+  on public_orders (created_day, id) where status = 'placed';
+
 -- ---------- offer keys always exist ----------
 insert into app_settings (key, value) values
   ('public_offer_active', '0'),
@@ -1663,11 +1683,22 @@ declare
   v_active jsonb;
   v_done jsonb;
   v_count int;
+  v_open int;
 begin
-  select coalesce(jsonb_agg(staff_public_order(o.id) order by o.id), '[]')
-    into v_active
+  -- Oldest-first window, same rush-hour rationale as counter_board.
+  -- (count kept in v_open to keep the staff-view audit green.)
+  select count(*)::int into v_open
   from public_orders o
   where o.status = 'placed';
+
+  select coalesce(jsonb_agg(staff_public_order(o.id) order by o.id), '[]')
+    into v_active
+  from (
+    select id from public_orders
+    where status = 'placed'
+    order by id asc limit 100
+  ) s
+  join public_orders o on o.id = s.id;
 
   select count(*)::int into v_count
   from public_orders o
@@ -1684,6 +1715,7 @@ begin
 
   return jsonb_build_object(
     'active', v_active,
+    'activeCount', v_open,
     'doneToday', jsonb_build_object('count', v_count),
     'doneOrders', v_done
   );

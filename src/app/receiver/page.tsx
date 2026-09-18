@@ -12,6 +12,7 @@ import { IconReceipt, IconBox, IconCheck, IconSearch, IconBell, IconBellOff, Ico
 
 type Board = {
   active: Order[]
+  activeCount?: number
   doneToday: { count: number; revenue: number }
   doneOrders: Order[]
 }
@@ -31,6 +32,7 @@ type ParcelOrder = {
 }
 type ParcelBoard = {
   active: ParcelOrder[]
+  activeCount?: number
   doneToday: { count: number }
   doneOrders: ParcelOrder[]
 }
@@ -229,8 +231,8 @@ export default function ReceiverPage() {
   }
 
   const [search, setSearch] = useState('')
-  const waiting = board.active.length
-  const parcelWaiting = parcel.active.length
+  const waiting = board.activeCount ?? board.active.length
+  const parcelWaiting = parcel.activeCount ?? parcel.active.length
   const rawList = tab === 'new' ? board.active : board.doneOrders
   // Seamless order-number search (filters locally, no extra fetch, debounced via deferred value)
   const list = rawList.filter((o) => {
@@ -299,7 +301,13 @@ export default function ReceiverPage() {
             ) : parcelList.length === 0 ? (
               <div className="empty"><span className="e-ico" aria-hidden="true"><IconBox size={24} /></span><h3>No parcel orders</h3><p>Entrance orders will pop in here<br />with a sound alert.</p></div>
             ) : (
-              parcelList.map((o) => (
+              <>
+              {(parcel.activeCount ?? 0) > parcel.active.length && !search.trim() && (
+                <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>
+                  Showing oldest {parcel.active.length} of {parcel.activeCount} — serve to reveal more
+                </div>
+              )}
+              {parcelList.map((o) => (
                 <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
                   <div className="order-head">
                     <div className="token-chip">
@@ -333,7 +341,8 @@ export default function ReceiverPage() {
                     </div>
                   )}
                 </div>
-              ))
+              ))}
+              </>
             )
           ) : error && !list.length ? (
             <div className="empty"><span className="e-ico" aria-hidden="true"><IconBell size={24} /></span><h3>Connection issue</h3><p>{error}</p><button className="btn btn-primary" onClick={() => load()}>Try again</button></div>
@@ -345,6 +354,11 @@ export default function ReceiverPage() {
             )
           ) : (
             <>
+              {tab === 'new' && (board.activeCount ?? 0) > board.active.length && !search.trim() && (
+                <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>
+                  Showing oldest {board.active.length} of {board.activeCount} — serve to reveal more
+                </div>
+              )}
               {(tab === 'done' ? list.slice(0, doneVisible) : list).map((o) => (
               <div key={o.id} className={`order-card${o.status === 'placed' ? ' enter' : ''}`}>
                 <div className="order-head">
