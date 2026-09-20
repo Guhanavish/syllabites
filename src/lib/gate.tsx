@@ -153,7 +153,7 @@ export function GateLock({ children }: { children: ReactNode }) {
           <Credits />
         </div>
       ) : gateTab === 'order' ? (
-        <div className="scroll gate-order">
+        <div className="scroll stack gate-order">
           <div className="gate-backrow">
             <button className="admin-link" onClick={() => setGateTab('welcome')}>
               <IconBack size={15} /> Back to Welcome

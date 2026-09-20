@@ -598,25 +598,37 @@ h1, h2, h3, h4, p { margin: 0; }
   .add-btn:hover { filter: brightness(1.15); }
 }
 
-/* cart floating bar */
+/* cart bar: sticky in-flow footer so it always travels with the scroll
+   (absolute positioning detached it from scrolled content on some screens) */
+.scroll.stack { display: flex; flex-direction: column; }
+.scroll.stack > .menu-list { flex: 1 0 auto; }
 .cart-bar {
-  position: absolute; left: 14px; right: 14px;
+  position: sticky;
   bottom: calc(var(--nav-h) + var(--sab) + 12px);
   z-index: 15;
   display: flex; align-items: center; gap: 12px;
-  padding: 12px 12px 12px 20px;
+  margin: 0 2px;
+  padding: 0;
+  height: 0;
+  border: 0;
+  overflow: hidden;
   border-radius: 18px;
   background: linear-gradient(135deg, #2b1708 0%, #1c0f05 100%);
   color: #fff;
-  border: 1px solid #120a03;
   box-shadow: var(--shadow-2);
-  transform: translateY(calc(100% + 90px));
+  transform: translateY(12px);
   opacity: 0;
-  transition: transform .35s cubic-bezier(.2,.9,.3,1.15), opacity .25s;
+  visibility: hidden;
+  transition: transform .3s cubic-bezier(.2,.9,.3,1.15), opacity .25s, visibility .25s;
   pointer-events: none;
-  will-change: transform, opacity;
 }
-.cart-bar.show { transform: none; opacity: 1; pointer-events: auto; }
+.cart-bar.show {
+  transform: none; opacity: 1; visibility: visible; pointer-events: auto;
+  height: auto; overflow: visible;
+  margin: 14px 2px 0;
+  padding: 12px 12px 12px 20px;
+  border: 1px solid #120a03;
+}
 .cart-bar .cb-txt { flex: 1; }
 .cart-bar .cb-count { font-size: 12px; color: #ffb98a; font-weight: 700; }
 .cart-bar .cb-total { font-size: 17px; font-weight: 900; font-variant-numeric: tabular-nums; }
@@ -810,6 +822,12 @@ h1, h2, h3, h4, p { margin: 0; }
 .settings-row b { font-size: 14px; display: block; }
 .settings-row small { color: var(--muted); font-weight: 600; font-size: 12px; }
 
+/* backup progress */
+.backup-progress { margin-top: 12px; animation: rise .25s ease-out; }
+.backup-label { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 800; color: var(--ink-2); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.backup-track { height: 12px; border-radius: 99px; background: var(--bg-soft); border: 1px solid var(--line); overflow: hidden; }
+.backup-fill { height: 100%; border-radius: 99px; background: var(--grad-brand); transition: width .25s linear; }
+
 /* =============== sheets / modals / toasts =============== */
 .backdrop {
   position: absolute; inset: 0;
@@ -921,6 +939,28 @@ h1, h2, h3, h4, p { margin: 0; }
 
 .divider-label { display: flex; align-items: center; gap: 10px; margin: 22px 2px 14px; color: var(--muted); font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
 .divider-label::after { content: ""; flex: 1; height: 1px; background: var(--line-2); }
+
+/* PDF selection toolbar */
+.sel-toolbar { display: flex; align-items: center; gap: 10px; }
+.sel-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; cursor: pointer; }
+.sel-count { font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.order-select { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--sec); cursor: pointer; }
+
+/* text-based print document (browser Save-as-PDF keeps real selectable text) */
+.print-doc { display: none; }
+@media print {
+  .phone, .toasts, .offline-bar, .cart-bar { display: none !important; }
+  .print-doc { display: block; color: #000; font-family: Arial, Helvetica, sans-serif; }
+  .print-doc h1 { font-size: 20px; margin: 0 0 4px; }
+  .print-meta { font-size: 12px; color: #333; margin: 0 0 12px; }
+  .print-order { border: 1px solid #999; border-radius: 8px; padding: 12px; margin: 0 0 12px; break-inside: avoid; }
+  .print-order h2 { font-size: 16px; margin: 0 0 6px; }
+  .print-order p { font-size: 12px; margin: 2px 0; }
+  .print-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+  .print-table th, .print-table td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; }
+  .print-total { font-size: 13px; font-weight: bold; margin-top: 6px; }
+}
+@page { margin: 12mm; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001s !important; transition-duration: .001s !important; }

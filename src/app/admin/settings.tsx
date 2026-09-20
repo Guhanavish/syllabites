@@ -94,14 +94,42 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
     }
   }
 
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [backupPct, setBackupPct] = useState(0)
+
+  /* The snapshot RPC is opaque (one call, no server progress), so the bar
+     eases toward 90% on a timer and completes when the call resolves. */
   async function createBackup() {
+    if (backupBusy) return
+    setBackupBusy(true)
+    setBackupPct(2)
+    const t0 = Date.now()
+    const timer = setInterval(() => {
+      const elapsed = (Date.now() - t0) / 1000
+      setBackupPct((p) => Math.min(90, p + Math.max(0.4, 3 - elapsed * 0.06)))
+    }, 250)
     try {
       const r = await api<{ backupId?: number; id?: number }>('/api/admin/backups/create', {
         method: 'POST', body: { label: 'Manual backup' },
       })
+      clearInterval(timer)
+      setBackupPct(100)
       toast(`Backup #${r.backupId ?? r.id} saved on the server`, 'ok')
       loadBackups()
-    } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
+      setTimeout(() => { setBackupBusy(false); setBackupPct(0) }, 900)
+    } catch (e: any) {
+      clearInterval(timer)
+      setBackupBusy(false)
+      setBackupPct(0)
+      if (!expired(e)) toast(e.message, 'bad')
+    }
+  }
+
+  function backupPhase(pct: number) {
+    if (pct >= 100) return 'Backup saved'
+    if (pct < 30) return 'Connecting to database…'
+    if (pct < 62) return 'Snapshotting menus & stock…'
+    return 'Snapshotting orders & sales…'
   }
 
   async function resetAll() {
@@ -201,7 +229,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
 
       {/* ---- discount offer (public orders only) ---- */}
       <div className="card pad" style={{ marginBottom: 14 }}>
-        <b style={{ fontSize: 15 }}>🎁 Public order discount offer</b>
+        <b style={{ fontSize: 15 }}>Public order discount offer</b>
         <p style={{ color: 'var(--muted)', fontSize: 12.5, fontWeight: 600, margin: '4px 0 14px' }}>
           5-10% off on 3 random orders out of 50 (6% chance). Only for entrance (public) orders. Click Start to activate.
         </p>
@@ -253,7 +281,15 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
           Resetting always saves a full backup on the server first. Importing a backup always saves the current
           data before anything changes, nothing is ever lost.
         </p>
-        <button className="btn btn-ghost block" onClick={createBackup}>💾 Save a backup now</button>
+        <button className={`btn btn-ghost block${backupBusy ? ' loading' : ''}`} disabled={backupBusy} onClick={createBackup}>
+          {backupBusy ? 'Backing up…' : 'Save a backup now'}
+        </button>
+        {backupBusy && (
+          <div className="backup-progress" role="status" aria-live="polite" aria-label={backupPhase(backupPct)}>
+            <div className="backup-label"><span>{backupPhase(backupPct)}</span><span>{Math.floor(backupPct)}%</span></div>
+            <div className="backup-track"><div className="backup-fill" style={{ width: `${backupPct}%` }} /></div>
+          </div>
+        )}
 
         <div style={{ marginTop: 14 }}>
           {backupsLoading ? (
@@ -262,7 +298,6 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
             <small style={{ color: 'var(--muted)', fontWeight: 600 }}>No backups yet.</small>
           ) : backups.map((b) => (
             <div key={b.id} className="alert-row">
-              <span className="alert-emoji">🗄️</span>
               <span className="alert-name">
                 #{b.id} · {b.label}
                 <br />
@@ -277,19 +312,19 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         </div>
 
         <button className="btn soft-bad xl block" style={{ marginTop: 16 }} onClick={resetAll}>
-          🧹 Back up everything &amp; start fresh
+          Back up everything &amp; start fresh
         </button>
       </div>
 
       <div className="card settings-row" style={{ marginBottom: 14 }}>
-        <div className="sr-ico">☁️</div>
+        <div className="sr-ico" aria-hidden="true">DB</div>
         <div className="sr-main">
           <b>Cloud data</b>
           <small>All orders, sales and stock live in your Supabase database, safe across restarts and code updates.</small>
         </div>
       </div>
 
-      <button className="btn soft-bad xl block" onClick={onLogout}>Log out of admin 🚪</button>
+      <button className="btn soft-bad xl block" onClick={onLogout}>Log out of admin</button>
     </>
   )
 }

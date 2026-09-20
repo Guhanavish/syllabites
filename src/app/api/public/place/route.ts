@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
   if (typeof company === 'string' && company.trim() !== '') {
     return NextResponse.json({ error: 'Could not place order' }, { status: 400 })
   }
-  const lines = asCartLines(items, 50, 10)
+  // Public orders have no per-item cap (staff keeps its own limit); SQL still guards stock.
+  const lines = asCartLines(items, 50, Infinity)
   const cName = asText(name, 60)
   const cKlass = asText(klass, 30)
   const cSection = asText(section, 30)

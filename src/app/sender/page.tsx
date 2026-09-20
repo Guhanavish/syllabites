@@ -206,7 +206,7 @@ export default function SenderPage() {
         <button className="icon-btn" onClick={switchUser} aria-label="Switch user"><IconDoor size={19} /></button>
       </header>
 
-      <div className="scroll">
+      <div className="scroll stack">
         <div style={{ display: tab === 'menu' ? '' : 'none' }}>
           <div className="search-wrap">
             <span className="s-ico"><IconSearch size={17} /></span>

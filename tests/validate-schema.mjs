@@ -42,11 +42,18 @@ const begins = (sql.match(/\bbegin\b/gi) || []).length
 const ends = (sql.match(/\bend\b(?!\s*if\b)/gi) || []).length
 console.log(`  ℹ begin: ${begins}, end/end-if blocks: ${ends} (informational)`)
 
-/* split into statements respecting single quotes, tracking line numbers */
+/* split into statements respecting single quotes and -- comments
+   (an apostrophe in a comment must not swallow statement breaks) */
 console.log('— RAISE statements —')
 let stmts = [], cur = '', inQ = false, startLine = 1, line = 1
-for (const ch of sql) {
+for (let si = 0; si < sql.length; si++) {
+  const ch = sql[si]
   if (ch === '\n') line++
+  if (!inQ && ch === '-' && sql[si + 1] === '-') {
+    while (si < sql.length && sql[si] !== '\n') si++
+    if (si < sql.length) line++
+    continue
+  }
   if (ch === "'") inQ = !inQ
   if (ch === ';' && !inQ) { if (cur.trim()) stmts.push({ text: cur, line: startLine }); cur = ''; startLine = line + 1 } else { if (!cur.trim() && !/\s/.test(ch)) startLine = line; cur += ch }
 }
@@ -190,7 +197,7 @@ ok(/Price too high/i.test(sql), 'save functions reject over-limit prices with a 
 
 console.log('— maintenance under live traffic —')
 ok(/wipe_live_data_retry\(\)/.test(sql), 'wipe retry helper exists')
-ok(/statement_timeout\s*=\s*'120s'/.test(sql), 'maintenance RPCs get a timeout budget past the platform default')
+ok(/statement_timeout\s*=\s*'600s'/.test(sql), 'maintenance RPCs get a timeout budget past the platform default')
 ok(/pg_sleep\(0\.5 \* v_try\)/.test(sql), 'wipe retries with backoff on lock contention')
 
 console.log('— staff parcel board (price-blind) —')

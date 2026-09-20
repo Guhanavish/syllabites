@@ -228,36 +228,67 @@
   begin
     if p_section not in ('boys','girls') then raise exception 'Invalid counter'; end if;
 
-    -- Oldest-first window: keeps rush-hour payloads small while every open
-    -- order stays reachable (serving one reveals the next on refresh).
+    -- Total pending count
     select count(*)::int into v_total
-    from orders o
-    where o.section = p_section and o.status = 'placed';
+    from orders where section = p_section and status = 'placed';
 
-    select coalesce(jsonb_agg(order_full(o.id) order by o.id), '[]')
-      into v_active
+    -- Fast single-pass JSON aggregation for active orders (LIMIT 40)
+    select coalesce(jsonb_agg(
+      jsonb_build_object(
+        'id', o.id,
+        'tokenNo', o.token_no,
+        'section', o.section,
+        'status', o.status,
+        'total', o.total,
+        'createdAt', o.created_at,
+        'items', coalesce(items_agg.items, '[]'::jsonb)
+      ) order by o.id asc
+    ), '[]'::jsonb) into v_active
     from (
-      select id from orders
+      select id, token_no, section, status, total, created_at
+      from orders
       where section = p_section and status = 'placed'
-      order by id asc limit 100
-    ) s
-    join orders o on o.id = s.id;
+      order by id asc limit 40
+    ) o
+    left join lateral (
+      select jsonb_agg(jsonb_build_object(
+        'name', oi.name, 'emoji', oi.emoji, 'price', oi.price, 'qty', oi.qty, 'lineTotal', oi.line_total
+      ) order by oi.id) as items
+      from order_items oi where oi.order_id = o.id
+    ) items_agg on true;
 
+    -- Today's summary stats
     select count(*)::int, coalesce(sum(o.total), 0)
       into v_count, v_revenue
     from orders o
     where o.section = p_section and o.created_day = istoday()
       and o.status in ('completed','cancelled');
 
-    select coalesce(jsonb_agg(order_full(o.id) order by o.id desc), '[]')
-      into v_done
+    -- Fast single-pass JSON aggregation for recently served orders (LIMIT 20)
+    select coalesce(jsonb_agg(
+      jsonb_build_object(
+        'id', o.id,
+        'tokenNo', o.token_no,
+        'section', o.section,
+        'status', o.status,
+        'total', o.total,
+        'createdAt', o.created_at,
+        'items', coalesce(items_agg.items, '[]'::jsonb)
+      ) order by o.id desc
+    ), '[]'::jsonb) into v_done
     from (
-      select id from orders
+      select id, token_no, section, status, total, created_at
+      from orders
       where section = p_section and created_day = istoday()
         and status in ('completed','cancelled')
       order by id desc limit 20
-    ) s
-    join orders o on o.id = s.id;
+    ) o
+    left join lateral (
+      select jsonb_agg(jsonb_build_object(
+        'name', oi.name, 'emoji', oi.emoji, 'price', oi.price, 'qty', oi.qty, 'lineTotal', oi.line_total
+      ) order by oi.id) as items
+      from order_items oi where oi.order_id = o.id
+    ) items_agg on true;
 
     return jsonb_build_object(
       'active', v_active,
@@ -694,7 +725,7 @@
     perform admin_verify(p_token);
     -- snapshots scan whole order history; give them room past the short
     -- platform statement timeout, and fail fast on lock waits (retried by caller)
-    set local statement_timeout = '120s';
+    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
     v_label := nullif(btrim(p_label, ''), '');
   if v_label is null then
@@ -788,7 +819,7 @@
     v_safety_id bigint;
   begin
     perform admin_verify(p_token);
-    set local statement_timeout = '120s';
+    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
 
     select payload into v_payload from backups where id = p_backup_id;
@@ -817,7 +848,7 @@
     v_label text;
   begin
     perform admin_verify(p_token);
-    set local statement_timeout = '120s';
+    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
 
     -- everything that exists right now is preserved on the server first
@@ -949,7 +980,7 @@
       raise exception 'Your cart is empty'; end if;
     for v_el in select * from jsonb_array_elements(p_items) loop
       v_id := (v_el->>'itemId')::bigint; v_qty := coalesce((v_el->>'qty')::int,0);
-      if v_qty < 1 or v_qty > 10 then raise exception 'Approach Volunteers For more orders'; end if;
+      if v_qty < 1 then raise exception 'Invalid quantity'; end if;
       select * into v_item from items where id=v_id for update;
       if not found then raise exception 'Something in your cart was just removed'; end if;
       if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
@@ -1119,6 +1150,12 @@ create index if not exists idx_orders_placed_board
   on orders (section, created_day, id) where status = 'placed';
 create index if not exists idx_public_orders_placed
   on public_orders (created_day, id) where status = 'placed';
+-- Covering fast path for the counter board's active window: all projected
+-- columns ride along, so rush-hour lookups never touch the heap.
+create index if not exists idx_orders_active_board_fast
+  on orders (section, id asc)
+  include (token_no, total, created_at)
+  where status = 'placed';
 
 -- ---------- offer keys always exist ----------
 insert into app_settings (key, value) values
@@ -1187,7 +1224,7 @@ begin
     if v_qty_text is null or v_qty_text = '' then v_qty := 0;
     else v_qty := v_qty_text::int;
     end if;
-    if v_qty < 1 or v_qty > 10 then raise exception 'Approach Volunteers For more orders'; end if;
+    if v_qty < 1 then raise exception 'Invalid quantity'; end if;
     select * into v_item from parcel_items where id=v_id for update;
     if not found then raise exception 'Something in your cart was just removed'; end if;
     if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
@@ -1437,7 +1474,7 @@ declare
   v_nm text;
   v_pr numeric;
 begin
-  set local statement_timeout = '120s';
+  set local statement_timeout = '600s';
   set local lock_timeout = '5s';
   -- validate both menus BEFORE wiping: a bad backup must fail here with a
   -- friendly message, never halfway through with live data already gone

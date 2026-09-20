@@ -1,11 +1,29 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '@/lib/client'
 import { inr, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import { toast } from '@/lib/ui'
 import { Crumbs } from '@/components/site-chrome'
 import { IconSearch, IconBack, IconRefresh, IconReceipt } from '@/components/icons'
+
+type PORow = {
+  id: number
+  code: string
+  status: string
+  customerName: string
+  customerClass: string
+  customerSection: string
+  eventName: string
+  createdAt: string
+  total: number
+  isDiscounted?: boolean
+  discountPercent?: number
+  discountAmount?: number
+  originalTotal?: number
+  items?: { qty: number; name: string; lineTotal: number }[]
+}
 
 export default function PublicOrdersPage() {
   const [orders, setOrders] = useState<any[]>([])
@@ -13,6 +31,7 @@ export default function PublicOrdersPage() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [visible, setVisible] = useState(15)
+  const [selected, setSelected] = useState<Set<number>>(new Set())
 
   const load = useCallback(async () => {
     try {
@@ -42,6 +61,28 @@ export default function PublicOrdersPage() {
 
   const discounted = orders.filter((o:any)=>o.isDiscounted)
   const totalDiscounted = discounted.reduce((a:number,o:any)=>a+(o.discountAmount||0),0)
+
+  /* PDF selection: only ticked orders print. Selection survives filtering. */
+  function toggleSel(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+  function toggleAllFiltered() {
+    const ids = filtered.map((o: PORow) => o.id)
+    const all = ids.length > 0 && ids.every((id: number) => selected.has(id))
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (all) ids.forEach((id: number) => next.delete(id))
+      else ids.forEach((id: number) => next.add(id))
+      return next
+    })
+  }
+  const selOrders: PORow[] = orders.filter((o: PORow) => selected.has(o.id))
+  const generatedAt = new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' })
 
   return (
     <div className="root">
@@ -79,6 +120,27 @@ export default function PublicOrdersPage() {
           )}
         </div>
 
+        <div className="card pad sel-toolbar" style={{ marginTop: 14 }}>
+          <label className="sel-all">
+            <input
+              type="checkbox"
+              className="order-select"
+              checked={filtered.length > 0 && filtered.every((o: PORow) => selected.has(o.id))}
+              onChange={toggleAllFiltered}
+              aria-label="Select all visible orders for PDF"
+            />
+            <span>Select all</span>
+          </label>
+          <span className="sel-count">{selected.size} selected</span>
+          <span style={{ flex: 1 }} />
+          {selected.size > 0 && (
+            <button className="btn btn-ghost sm" onClick={() => setSelected(new Set())}>Clear</button>
+          )}
+          <button className="btn btn-primary sm" disabled={selected.size === 0} onClick={() => window.print()}>
+            PDF{selected.size > 0 ? ` (${selected.size})` : ''}
+          </button>
+        </div>
+
         <div style={{ marginTop: 14 }}>
           {loading ? (
             <>
@@ -91,6 +153,13 @@ export default function PublicOrdersPage() {
               {filtered.slice(0, visible).map((o:any)=>(
             <div key={o.id} className="order-card enter" style={{ marginBottom: 12 }}>
               <div className="order-head">
+                <input
+                  type="checkbox"
+                  className="order-select"
+                  checked={selected.has(o.id)}
+                  onChange={() => toggleSel(o.id)}
+                  aria-label={`Select order ${o.code} for PDF`}
+                />
                 <div className="token-chip"><span className="tk-lbl">CODE</span><span className="tk-no">{o.code}</span></div>
                 <div className="order-title">
                   <span className={`badge-pill ${statusCls(o.status)}`}>{statusPill(o.status)}</span>
@@ -127,6 +196,33 @@ export default function PublicOrdersPage() {
           )}
         </div>
       </div>
+      {typeof document !== 'undefined' && createPortal(
+        <div className="print-doc" aria-hidden="true">
+          <h1>Syllabites — Order verification</h1>
+          <p className="print-meta">Generated {generatedAt} · {selOrders.length} entrance order(s) · ticked orders only</p>
+          {selOrders.map((o: PORow) => (
+            <section key={o.id} className="print-order">
+              <h2>Access code {o.code} — {statusPill(o.status)}</h2>
+              <p>Name: {o.customerName} · Class: {o.customerClass} · Section: {o.customerSection} · Event: {o.eventName}</p>
+              <p>Placed: {timeAgo(o.createdAt)} · {clockTime(o.createdAt)}</p>
+              <table className="print-table">
+                <thead><tr><th>Qty</th><th>Item</th><th>Amount</th></tr></thead>
+                <tbody>
+                  {o.items?.map((li: { qty: number; name: string; lineTotal: number }, ix: number) => (
+                    <tr key={ix}><td>{li.qty}</td><td>{li.name}</td><td>{inr(li.lineTotal)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+              {o.isDiscounted ? (
+                <p className="print-total">Original {inr(o.originalTotal)} · {o.discountPercent}% off, saved {inr(o.discountAmount)} · Total {inr(o.total)}</p>
+              ) : (
+                <p className="print-total">Total {inr(o.total)}</p>
+              )}
+            </section>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

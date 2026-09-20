@@ -86,7 +86,6 @@ export function PublicOrder() {
     if (!it) return
     const cur = cart[String(id)] || 0
     const next = cur + delta
-    if (next > 10) { toast('Approach Volunteers For more orders', 'bad', 3400); return }
     if (next <= 0) { const n = { ...cart }; delete n[String(id)]; setCart(n); buzz(8); return }
     if (next > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     buzz(8)
@@ -116,7 +115,6 @@ export function PublicOrder() {
     if (!detailsOk) {
       toast('Please fill Name, Class, Section and Event', 'bad'); return
     }
-    for (const qty of Object.values(cart)) if ((qty as number) > 10) { toast('Approach Volunteers For more orders', 'bad'); return }
     setSending(true)
     try {
       const res = await fetch('/api/public/place', {
