@@ -713,25 +713,25 @@
   update backups set item_counts = backup_counts(payload) where item_counts is null;
 
   create or replace function backup_payload() returns jsonb
-  language sql stable security definer set search_path = public, extensions as $$
+  language sql stable security definer set search_path = public, extensions set statement_timeout = '120s' as $$
     select jsonb_build_object(
-      'items',      (select coalesce(jsonb_agg(to_jsonb(i)), '[]'::jsonb) from items i),
-      'orders',     (select coalesce(jsonb_agg(to_jsonb(o)), '[]'::jsonb) from orders o),
-      'orderItems', (select coalesce(jsonb_agg(to_jsonb(oi)), '[]'::jsonb) from order_items oi)
+      'items',            (select coalesce(jsonb_agg(to_jsonb(i)), '[]'::jsonb) from items i),
+      'parcelItems',      (select coalesce(jsonb_agg(to_jsonb(p)), '[]'::jsonb) from parcel_items p),
+      'orders',           (select coalesce(jsonb_agg(to_jsonb(o)), '[]'::jsonb) from orders o),
+      'orderItems',       (select coalesce(jsonb_agg(to_jsonb(oi)), '[]'::jsonb) from order_items oi),
+      'publicOrders',     (select coalesce(jsonb_agg(to_jsonb(po)), '[]'::jsonb) from public_orders po),
+      'publicOrderItems', (select coalesce(jsonb_agg(to_jsonb(poi)), '[]'::jsonb) from public_order_items poi)
     )
   $$;
 
   create or replace function admin_create_backup(p_token text, p_label text default null) returns bigint
-  language plpgsql security definer set search_path = public, extensions as $$
+  language plpgsql security definer set search_path = public, extensions set statement_timeout = '120s' as $$
   declare
     v_id bigint;
     v_label text;
     v_p jsonb;
   begin
     perform admin_verify(p_token);
-    -- snapshots scan whole order history; give them room past the short
-    -- platform statement timeout, and fail fast on lock waits (retried by caller)
-    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
     v_label := nullif(btrim(p_label, ''), '');
   if v_label is null then
@@ -763,12 +763,12 @@
   end $$;
 
   create or replace function wipe_live_data() returns void
-  language sql security definer set search_path = public, extensions as $$
+  language sql security definer set search_path = public, extensions set statement_timeout = '120s' as $$
     truncate table order_items, orders, items restart identity cascade;
   $$;
 
   create or replace function restore_payload(p_payload jsonb) returns void
-  language plpgsql security definer set search_path = public, extensions as $$
+  language plpgsql security definer set search_path = public, extensions set statement_timeout = '120s' as $$
   begin
     perform wipe_live_data();
 
@@ -820,14 +820,13 @@
   end $$;
 
   create or replace function admin_restore_backup(p_token text, p_backup_id bigint) returns jsonb
-  language plpgsql security definer set search_path = public, extensions as $$
+  language plpgsql security definer set search_path = public, extensions set statement_timeout = '120s' as $$
   declare
     v_payload jsonb;
     v_safety_id bigint;
     v_auto jsonb;
   begin
     perform admin_verify(p_token);
-    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
 
     select payload into v_payload from backups where id = p_backup_id;
@@ -851,14 +850,13 @@
   end $$;
 
   create or replace function admin_reset_all(p_token text, p_label text default null) returns jsonb
-  language plpgsql security definer set search_path = public, extensions as $$
+  language plpgsql security definer set search_path = public, extensions set statement_timeout = '120s' as $$
   declare
     v_backup_id bigint;
     v_counts jsonb;
     v_label text;
   begin
     perform admin_verify(p_token);
-    set local statement_timeout = '600s';
     set local lock_timeout = '5s';
 
     -- everything that exists right now is preserved on the server first

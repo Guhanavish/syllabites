@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sb } from '@/lib/supabase'
 import { adminToken, rpcResponse } from '@/lib/server'
 
+export const maxDuration = 60
+
 /** Back up everything on the server, then wipe menu/orders/sales for a fresh start */
 export async function POST(req: NextRequest) {
   const { label } = await req.json().catch(() => ({}))

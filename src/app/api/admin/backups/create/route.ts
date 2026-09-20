@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sb } from '@/lib/supabase'
 import { adminToken, rpcResponse } from '@/lib/server'
 
+export const maxDuration = 60
+
 /** Snapshot current data into the backups table */
 export async function POST(req: NextRequest) {
   const { label } = await req.json().catch(() => ({}))
