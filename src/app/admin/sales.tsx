@@ -85,9 +85,7 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
         <div className="kpi"><div className="k-lbl">Boys</div><div className="k-val">{inr(b.revenue)}</div><div className="k-sub">{b.orders} orders</div></div>
         <div className="kpi"><div className="k-lbl">Girls</div><div className="k-val">{inr(g.revenue)}</div><div className="k-sub">{g.orders} orders</div></div>
         <div className="kpi"><div className="k-lbl">Cancelled</div><div className="k-val">{s.cancelled}</div></div>
-        <div className="kpi"><div className="k-lbl">Low stock</div><div className="k-val">{s.lowStock.length}</div></div>
         <div className="kpi"><div className="k-lbl">Parcel sales</div><div className="k-val">{inr(s.parcelRevenue ?? 0)}</div><div className="k-sub">{s.parcelOrders ?? s.publicOrders ?? 0} orders · isolated</div></div>
-        <div className="kpi"><div className="k-lbl">Parcel low stock</div><div className="k-val">{(s.parcelLowStock ?? []).length}</div></div>
       </div>
 
       <div className="card pad split-card" style={{ marginTop: 14 }}>
@@ -136,40 +134,6 @@ export function SalesTab({ expired }: { expired: (e: any) => boolean }) {
                     <span className="rank-fill" style={{ width: `${Math.max(6, Math.round((t.sold / maxSold) * 100))}%` }} />
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {s.lowStock.length > 0 && (
-        <>
-          <div className="divider-label">Needs restocking (staff)</div>
-          <div className="card pad">
-            {s.lowStock.map((it) => (
-              <div key={it.id} className="alert-row">
-                <span className="alert-emoji">{it.emoji}</span>
-                <span className="alert-name">{it.name}</span>
-                <span className={`stock-pill ${it.stock === 0 ? 'sp-zero' : 'sp-low'}`}>
-                  {it.stock === 0 ? 'OUT' : `${it.stock} left`}
-                </span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {(s.parcelLowStock ?? []).length > 0 && (
-        <>
-          <div className="divider-label">Parcel needs restocking</div>
-          <div className="card pad">
-            {(s.parcelLowStock ?? []).map((it) => (
-              <div key={it.id} className="alert-row">
-                <span className="alert-emoji">{it.emoji}</span>
-                <span className="alert-name">{it.name}</span>
-                <span className={`stock-pill ${it.stock === 0 ? 'sp-zero' : 'sp-low'}`}>
-                  {it.stock === 0 ? 'OUT' : `${it.stock} left`}
-                </span>
               </div>
             ))}
           </div>

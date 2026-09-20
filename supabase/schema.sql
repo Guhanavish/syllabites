@@ -152,21 +152,16 @@
     -- serialize order creation per counter/day so numbers stay gapless
     perform pg_advisory_xact_lock(hashtext('order|' || p_section || '|' || istoday()::text));
 
-    -- validate cart & lock stock rows
+    -- no quantity caps, no stock checks: any order goes through
     for v_el in select * from jsonb_array_elements(p_items) loop
       v_id  := (v_el->>'itemId')::bigint;
       v_qty := coalesce((v_el->>'qty')::int, 0);
-      if v_qty < 1 or v_qty > 50 then
-        raise exception 'Contanct The volunteers for high quantities';
+      if v_qty < 1 then
+        raise exception 'Invalid quantity';
       end if;
       select * into v_item from items where id = v_id for update;
       if not found then raise exception 'Something in your cart was just removed'; end if;
       if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
-      if v_item.stock < v_qty then
-        if v_item.stock = 0 then raise exception '"%" just went out of stock', v_item.name;
-        else raise exception 'Only % left of "%" ', v_item.stock, v_item.name;
-        end if;
-      end if;
       v_total := v_total + v_item.price * v_qty;
     end loop;
 
@@ -184,7 +179,7 @@
       select * into v_item from items where id = v_id;
       insert into order_items (order_id, item_id, name, emoji, price, qty, line_total)
       values (v_order_id, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price * v_qty);
-      update items set stock = stock - v_qty, updated_at = now() where id = v_id;
+      -- stock column is frozen: no decrement, nothing to restore on cancel
     end loop;
 
     v_result := order_full(v_order_id);
@@ -323,12 +318,7 @@
       set status = p_status, updated_at = now()
     where id = p_order_id;
 
-    if p_status = 'cancelled' then
-      update items i
-        set stock = i.stock + oi.qty, updated_at = now()
-        from order_items oi
-      where oi.order_id = p_order_id and oi.item_id = i.id;
-    end if;
+    -- stock column is frozen: nothing is decremented, nothing is restored
 
     return order_full(p_order_id);
   end $$;
@@ -707,6 +697,21 @@
   );
   alter table backups enable row level security;
 
+  -- List views must never detoast multi-MB payloads: per-backup counts
+  -- live here, filled once at insert time from the already-built payload.
+  create or replace function backup_counts(p jsonb) returns jsonb
+  language sql immutable security definer set search_path = public, extensions as $$
+    select jsonb_build_object(
+      'items', jsonb_array_length(coalesce(p->'items', '[]'::jsonb)),
+      'parcelItems', jsonb_array_length(coalesce(p->'parcelItems', p->'parcel_items', '[]'::jsonb)),
+      'orders', jsonb_array_length(coalesce(p->'orders', '[]'::jsonb)),
+      'publicOrders', jsonb_array_length(coalesce(p->'publicOrders', p->'public_orders', '[]'::jsonb))
+    )
+  $$;
+
+  alter table backups add column if not exists item_counts jsonb;
+  update backups set item_counts = backup_counts(payload) where item_counts is null;
+
   create or replace function backup_payload() returns jsonb
   language sql stable security definer set search_path = public, extensions as $$
     select jsonb_build_object(
@@ -721,6 +726,7 @@
   declare
     v_id bigint;
     v_label text;
+    v_p jsonb;
   begin
     perform admin_verify(p_token);
     -- snapshots scan whole order history; give them room past the short
@@ -731,8 +737,9 @@
   if v_label is null then
       v_label := 'Manual backup';
     end if;
-    insert into backups (label, payload)
-    values (v_label, backup_payload())
+    v_p := backup_payload();
+    insert into backups (label, payload, item_counts)
+    values (v_label, v_p, backup_counts(v_p))
     returning id into v_id;
     return v_id;
   end $$;
@@ -747,8 +754,8 @@
             'id', b.id,
             'label', b.label,
             'createdAt', b.created_at,
-            'items', jsonb_array_length(b.payload->'items'),
-            'orders', jsonb_array_length(b.payload->'orders')
+            'items', coalesce((b.item_counts->>'items')::int, 0),
+            'orders', coalesce((b.item_counts->>'orders')::int, 0)
           ) order by b.id desc), '[]')
       into v_out
     from backups b;
@@ -817,6 +824,7 @@
   declare
     v_payload jsonb;
     v_safety_id bigint;
+    v_auto jsonb;
   begin
     perform admin_verify(p_token);
     set local statement_timeout = '600s';
@@ -826,8 +834,10 @@
     if not found then raise exception 'Backup not found'; end if;
 
     -- safety net: snapshot CURRENT data before overwriting it
-    insert into backups (label, payload)
-    values ('Auto — before importing backup #' || p_backup_id, backup_payload())
+    v_auto := backup_payload();
+    insert into backups (label, payload, item_counts)
+    values ('Auto — before importing backup #' || p_backup_id,
+      v_auto, backup_counts(v_auto))
     returning id into v_safety_id;
 
     perform restore_payload(v_payload);
@@ -858,8 +868,8 @@
     end if;
     -- snapshot once and reuse it (the scan is the slowest part)
     v_counts := backup_payload();
-    insert into backups (label, payload)
-    values (v_label, v_counts)
+    insert into backups (label, payload, item_counts)
+    values (v_label, v_counts, backup_counts(v_counts))
     returning id into v_backup_id;
 
     -- TRUNCATE needs exclusive locks while phones poll constantly: retry it
@@ -905,6 +915,10 @@
     line_total bigint not null
   );
   create index if not exists idx_public_order_items_order on public_order_items (order_id);
+
+  -- no per-item cap on public orders: quantity just needs to be positive
+  alter table public_order_items drop constraint if exists public_order_items_qty_check;
+  alter table public_order_items add constraint public_order_items_qty_check check (qty > 0);
 
   alter table public_orders enable row level security;
   alter table public_order_items enable row level security;
@@ -1228,10 +1242,7 @@ begin
     select * into v_item from parcel_items where id=v_id for update;
     if not found then raise exception 'Something in your cart was just removed'; end if;
     if not v_item.available then raise exception '"%" is unavailable right now', v_item.name; end if;
-    if v_item.stock < v_qty then
-      if v_item.stock=0 then raise exception '"%" just went out of stock', v_item.name;
-      else raise exception 'Only % left of "%" ', v_item.stock, v_item.name; end if;
-    end if;
+    -- stock column is frozen: no decrement, nothing to restore on cancel
     v_total := v_total + v_item.price * v_qty;
   end loop;
 
@@ -1275,7 +1286,7 @@ begin
     select * into v_item from parcel_items where id=v_id;
     insert into public_order_items (order_id, item_id, name, emoji, price, qty, line_total)
     values (v_oid, v_id, v_item.name, v_item.emoji, v_item.price, v_qty, v_item.price*v_qty);
-    update parcel_items set stock = stock - v_qty, updated_at=now() where id=v_id;
+    -- stock column is frozen: no decrement anywhere in this flow
   end loop;
   return public_order_full(v_oid);
 end $$;
@@ -1287,9 +1298,7 @@ begin
   if p_status not in ('completed','cancelled') then raise exception 'Unknown status'; end if;
   update public_orders set status=p_status, updated_at=now() where id=p_order_id;
   if not found then raise exception 'Order not found'; end if;
-  if p_status='cancelled' then
-    update parcel_items i set stock=i.stock+oi.qty, updated_at=now() from public_order_items oi where oi.order_id=p_order_id and oi.item_id=i.id;
-  end if;
+  -- stock column is frozen: nothing is decremented, nothing is restored
   return public_order_full(p_order_id);
 end $$;
 
@@ -1605,14 +1614,15 @@ declare
   v_out jsonb;
 begin
   perform admin_verify(p_token);
+  -- counts come from the sidecar column: payloads are never detoasted here
   select coalesce(jsonb_agg(jsonb_build_object(
           'id', b.id,
           'label', b.label,
           'createdAt', b.created_at,
-          'items', jsonb_array_length(coalesce(b.payload->'items', '[]'::jsonb)),
-          'parcelItems', jsonb_array_length(coalesce(b.payload->'parcelItems', b.payload->'parcel_items', '[]'::jsonb)),
-          'orders', jsonb_array_length(coalesce(b.payload->'orders', '[]'::jsonb)),
-          'publicOrders', jsonb_array_length(coalesce(b.payload->'publicOrders', b.payload->'public_orders', '[]'::jsonb))
+          'items', coalesce((b.item_counts->>'items')::int, 0),
+          'parcelItems', coalesce((b.item_counts->>'parcelItems')::int, 0),
+          'orders', coalesce((b.item_counts->>'orders')::int, 0),
+          'publicOrders', coalesce((b.item_counts->>'publicOrders')::int, 0)
         ) order by b.id desc), '[]')
     into v_out
   from backups b;
@@ -1777,12 +1787,7 @@ begin
     set status = p_status, updated_at = now()
   where id = p_order_id;
 
-  if p_status = 'cancelled' then
-    update parcel_items i
-      set stock = i.stock + oi.qty, updated_at = now()
-      from public_order_items oi
-    where oi.order_id = p_order_id and oi.item_id = i.id;
-  end if;
+  -- stock column is frozen: nothing is decremented, nothing is restored
 
   return staff_public_order(p_order_id);
 end $$;

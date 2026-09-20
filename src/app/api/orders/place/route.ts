@@ -12,7 +12,8 @@ export async function POST(req: NextRequest) {
   if (sec !== 'boys' && sec !== 'girls') return badRequest('Invalid counter')
   const token = asText(clientToken, 64)
   if (!token) return badRequest('Missing order token. Please retry.')
-  const lines = asCartLines(items, 50, 50)
+  // No per-item cap and no stock concept: any order goes through.
+  const lines = asCartLines(items, 50, Infinity)
   if (!lines) return badRequest('Invalid items in order')
   return rpcResponse(
     () =>

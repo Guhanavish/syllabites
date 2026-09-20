@@ -23,13 +23,9 @@ const SettingsTab = dynamic(() => import('./settings').then((m) => m.SettingsTab
 
 export default function AdminPage() {
   const [authed, setAuthed] = useState<null | boolean>(null)
-  const [tab, setTab] = useState<'sales' | 'menu' | 'orders' | 'settings'>(() => {
-    try {
-      const t = localStorage.getItem('fc.admin.tab')
-      if (t === 'sales' || t === 'menu' || t === 'orders' || t === 'settings') return t
-    } catch {}
-    return 'sales'
-  })
+  // Locked to 'sales' on first render so SSR and hydration agree;
+  // the stored tab is restored in the effect below.
+  const [tab, setTab] = useState<'sales' | 'menu' | 'orders' | 'settings'>('sales')
   const [notice, setNotice] = useState('')
 
   function pickTab(t: 'sales' | 'menu' | 'orders' | 'settings') {
@@ -38,7 +34,15 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
-    api('/api/admin/check').then(() => setAuthed(true)).catch(() => setAuthed(false))
+    // Tab restore rides the auth callback (async, so the rule stays quiet).
+    // Invisible timing: the page renders a blank root until authed resolves.
+    api('/api/admin/check').then(() => {
+      try {
+        const t = localStorage.getItem('fc.admin.tab')
+        if (t === 'sales' || t === 'menu' || t === 'orders' || t === 'settings') setTab(t)
+      } catch {}
+      setAuthed(true)
+    }).catch(() => setAuthed(false))
   }, [])
 
   function handleExpired(e: any) {

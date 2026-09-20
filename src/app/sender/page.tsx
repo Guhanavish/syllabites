@@ -51,7 +51,7 @@ export default function SenderPage() {
     try {
       const list: MenuItem[] = await fetchMenu('items')
       setItems(list)
-      setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
+      setCats(['All', ...Array.from(new Set(list.map((i) => i.category).filter((c) => c && c.trim() !== '')))])
     } catch {}
   }, [])
 
@@ -77,15 +77,14 @@ export default function SenderPage() {
     return () => { hb(); stopPoll() }
   }, [section, loadMenu, loadMine, loadTokens])
 
-  /* clamp cart to reality whenever menu loads */
+  /* drop cart lines whose item vanished or was hidden whenever menu loads */
   useEffect(() => {
     if (!items.length || !section) return
     let changed = false
     const next = { ...cart }
     for (const id of Object.keys(next)) {
       const it = items.find((x) => String(x.id) === id)
-      if (!it || !it.available || it.stock === 0) { delete next[id]; changed = true }
-      else if (next[id] > it.stock || next[id] > 50) { next[id] = Math.min(it.stock, 50); changed = true }
+      if (!it || !it.available) { delete next[id]; changed = true }
     }
     if (changed) { setCart(next); localStorage.setItem(`fc.cart.${section}`, JSON.stringify(next)) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,14 +101,12 @@ export default function SenderPage() {
     return () => { db().removeChannel(ch) }
   }, [section, loadMenu, loadMine])
 
-  /* ---------- cart ops, max 50 per item for Boys/Girls counters ---------- */
+  /* ---------- cart ops: no quantity caps, no stock checks ---------- */
   function addToCart(id: number, delta: number) {
     const it = items.find((x) => x.id === id)
     if (!it || !it.available || !section) return
     const cur = cart[String(id)] || 0
     const nxt = cur + delta
-    if (nxt > 50) { toast('Contanct The volunteers for high quantities', 'bad', 3400); return }
-    if (nxt > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     const next = { ...cart }
     let v = Math.max(0, nxt)
     if (v === 0) delete next[String(id)]; else next[String(id)] = v
@@ -233,24 +230,22 @@ export default function SenderPage() {
             ) : filtered.map((it) => {
               const inCart = cart[String(it.id)] || 0
               return (
-                <div key={it.id} className={`item-row${it.stock === 0 || !it.available ? ' out' : ''}`}>
+                <div key={it.id} className={`item-row${!it.available ? ' out' : ''}`}>
                   <div className="emoji-tile" role="img" aria-label={it.name}>{it.emoji}</div>
                   <div className="item-info">
                     <div className="item-name">{it.name}</div>
                     <div className="item-cat">{it.category}</div>
                     <div className="item-price">{inr(it.price)}</div>
-                    {it.stock === 0 ? <div className="stock-note out">Out of stock</div>
-                      : it.stock <= 5 ? <div className="stock-note low">Only {it.stock} left!</div>
-                      : <div className="stock-note ok">{it.stock} available</div>}
+                    {!it.available && <div className="stock-note out">Currently unavailable</div>}
                   </div>
                   {inCart > 0 ? (
                     <div className="stepper">
                       <button onClick={() => addToCart(it.id, -1)} aria-label={inCart <= 1 ? 'Remove from cart' : 'Decrease quantity'}>{inCart <= 1 ? <IconTrash size={15} /> : '−'}</button>
                       <span className="qty-val">{inCart}</span>
-                      <button disabled={inCart >= 50 || inCart >= it.stock} onClick={() => addToCart(it.id, +1)}>+</button>
+                      <button onClick={() => addToCart(it.id, +1)} aria-label="Increase quantity">+</button>
                     </div>
                   ) : (
-                    <button className="add-btn" disabled={it.stock === 0} onClick={() => addToCart(it.id, +1)}>ADD +</button>
+                    <button className="add-btn" disabled={!it.available} onClick={() => addToCart(it.id, +1)}>ADD +</button>
                   )}
                 </div>
               )

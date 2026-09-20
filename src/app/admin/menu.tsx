@@ -128,9 +128,6 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
               <div className="mgmt-name">{it.name}</div>
               <div className="mgmt-meta">
                 <span>{inr(it.price)}</span>·<span>{it.category}</span>
-                <span className={it.stock <= 5 ? (it.stock === 0 ? 'stock-pill sp-zero' : 'stock-pill sp-low') : ''}>
-                  {it.stock} in stock
-                </span>
                 <span className="sold-tag">{it.sold ?? 0} sold</span>
               </div>
             </div>
@@ -169,11 +166,10 @@ function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
       name: String(fd.get('name') || '').trim(),
       category: String(fd.get('category') || '').trim() || 'Snacks',
       price: Number(fd.get('price')),
-      stock: Number(fd.get('stock') || 0),
+      stock: item?.stock ?? 0,
     }
     if (!payload.name) { setErr('Item name is required'); return }
     if (!Number.isFinite(payload.price) || payload.price <= 0) { setErr('Price must be more than ₹0'); return }
-    if (!Number.isFinite(payload.stock) || payload.stock < 0) { setErr('Stock must be 0 or more'); return }
     setBusy(true)
     try {
       await api(saveEndpoint, { method: 'POST', body: payload })
@@ -210,22 +206,14 @@ function ItemForm({ item, categories, saveEndpoint, titleSuffix, onSaved }: {
           <input type="text" name="category" maxLength={30} placeholder="e.g. Snacks" defaultValue={item?.category || 'Snacks'} list="catList" />
           <datalist id="catList">{categories.map((c) => <option key={c} value={c} />)}</datalist>
         </div>
-        <div style={{ display: 'flex', gap: 12 }}>
-          <div className="field" style={{ flex: 1 }}>
-            <label>Price (₹)</label>
-            <div className="input-prefix">
-              <span className="pf">₹</span>
-              <input type="number" name="price" min="1" step="0.5" inputMode="decimal" placeholder="49"
-                defaultValue={item ? item.price / 100 : ''} />
-            </div>
-            <div className="hint">Must be more than ₹0.</div>
+        <div className="field">
+          <label>Price (₹)</label>
+          <div className="input-prefix">
+            <span className="pf">₹</span>
+            <input type="number" name="price" min="1" step="0.5" inputMode="decimal" placeholder="49"
+              defaultValue={item ? item.price / 100 : ''} />
           </div>
-          <div className="field" style={{ flex: 1 }}>
-            <label>Stock qty</label>
-            <input type="number" name="stock" min="0" step="1" inputMode="numeric" placeholder="20"
-              defaultValue={item?.stock ?? ''} />
-            <div className="hint">0 hides ordering but keeps the item.</div>
-          </div>
+          <div className="hint">Must be more than ₹0.</div>
         </div>
         <div className="field" style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',

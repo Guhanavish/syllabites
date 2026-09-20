@@ -73,7 +73,7 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   ok(order.tokenNo === 1 && order.total === 2000, `order B-1 total ₹20 (got ${order.tokenNo}, ${order.total})`)
 
   const stock = await db.exec(`select stock from items where id = ${itemId}`)
-  ok(stock[0].rows[0].stock === 3, 'stock decremented 5→3')
+  ok(stock[0].rows[0].stock === 5, 'stock column frozen: orders leave stock at 5')
 
   const dup = await db.exec(
     `select place_order('boys', 'pglitetoken00000001', '[{"itemId":${itemId},"qty":2}]'::jsonb) as o`
@@ -131,7 +131,7 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   ok('originalTotal' in po && 'isDiscounted' in po, 'parcel order exposes discount fields')
 
   const parcelStock = await db.exec(`select stock from parcel_items where id = ${parcelId}`)
-  ok(parcelStock[0].rows[0].stock === 8, 'parcel stock decremented 10→8')
+  ok(parcelStock[0].rows[0].stock === 10, 'parcel stock frozen at 10 (no decrement)')
 
   const staffAfter = await db.exec(`select stock from items where id = ${itemId}`)
   ok(String(staffAfter[0].rows[0].stock) === String(staffBefore[0].rows[0].stock), 'staff stock untouched by parcel order')
@@ -142,10 +142,10 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   const parcelAfter2 = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
   ok(String(parcelBefore2) === String(parcelAfter2), 'parcel stock untouched by staff order')
 
-  // cancel parcel order restores parcel stock only
+  // cancel parcel order changes status only; stock stays frozen
   await db.exec(`select admin_update_public_order_status('${token}', ${po.id}, 'cancelled') as o`)
   const parcelRestored = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
-  ok(parcelRestored === 10, 'parcel cancel restores parcel stock')
+  ok(parcelRestored === 10, 'parcel cancel leaves stock frozen at 10')
 
   // backup covers both menus
   const payload = await db.exec(`select backup_payload() as p`)
@@ -161,6 +161,18 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
     `select admin_save_parcel_item('${token}', '{"name":"Too Rich","price":2000000,"stock":1}'::jsonb) as it`
   ).catch((e) => e)
   ok(tooHigh instanceof Error && /Price too high/.test(tooHigh.message), 'parcel save rejects ₹20L with friendly message')
+
+  // no caps, no stock blocks: oversized orders go through on both flows
+  const bigStaff = await db.exec(
+    `select place_order('boys', 'pglitenocap00000001', '[{"itemId":${itemId},"qty":120}]'::jsonb) as o`
+  ).then((r) => toJ(r[0].rows[0].o)).catch((e) => ({ __err: e.message }))
+  ok(bigStaff.total === 120000, 'staff order with qty 120 succeeds (no cap)')
+  const bigParcel = toJ((await db.exec(
+    `select public_place_order('[{"itemId":${parcelId},"qty":25}]'::jsonb, 'Bulk Buyer', '12-C', 'C', 'Expo') as o`
+  ))[0].rows[0].o)
+  ok(bigParcel.total === 37500, 'parcel order beyond stock succeeds (no limit)')
+  const floored = (await db.exec(`select stock from parcel_items where id = ${parcelId}`))[0].rows[0].stock
+  ok(floored === 10, 'oversell leaves parcel stock frozen at 10')
 
   // bad backup fails BEFORE wiping — live data must survive
   const liveBefore = (await db.exec(`select count(*) as c from parcel_items`))[0].rows[0].c
@@ -204,7 +216,7 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   const served2 = toJ((await db.exec(`select staff_serve_public_order(${so.id}, 'completed') as o`))[0].rows[0].o)
   ok(served2.alreadyCompleted === true, 'second serve reports alreadyCompleted')
 
-  // staff cancel restores parcel stock (not staff stock)
+  // staff cancel changes status only; stock stays frozen (not restored)
   const cancelItem = await db.exec(
     `select admin_save_parcel_item('${token}', '{"name":"Cancel Restore","price":10,"stock":5,"available":true}'::jsonb) as it`
   )
@@ -214,7 +226,7 @@ const toJ = (x) => (typeof x === 'string' ? JSON.parse(x) : x)
   ))[0].rows[0].o)
   await db.exec(`select staff_serve_public_order(${cancelOrder.id}, 'cancelled') as o`)
   const cancelStock = (await db.exec(`select stock from parcel_items where id = ${cancelId}`))[0].rows[0].stock
-  ok(cancelStock === 5, 'staff cancel restores parcel stock')
+  ok(cancelStock === 5, 'staff cancel leaves parcel stock frozen at 5')
 }
 
 console.log(`\n${passed} passed, ${failed} failed`)

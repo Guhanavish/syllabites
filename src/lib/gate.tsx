@@ -27,18 +27,20 @@ export function GateLock({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const legal =
     pathname === '/terms' || pathname === '/privacy'
-  const [state, setState] = useState<'locked' | 'open'>(() => {
-    try {
-      if (typeof window !== 'undefined' && localStorage.getItem('fc.gate')) return 'open'
-    } catch {}
-    return 'locked'
-  })
+  // Always render locked on the first pass so SSR and hydration agree.
+  // The effect below re-opens instantly from cache on mount.
+  const [state, setState] = useState<'locked' | 'open'>('locked')
   const [mode, setMode] = useState<Mode>({ kind: 'enter' })
   const [gateTab, setGateTab] = useState<'welcome' | 'order' | 'staff'>('welcome')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
   const check = useCallback(async () => {
+    try {
+      // optimistic instant open from cache (avoids page-switch lag);
+      // the version check below re-locks if the password changed.
+      if (localStorage.getItem('fc.gate')) setState('open')
+    } catch {}
     try {
       const st = await api<{ version: number }>('/api/gate/status')
       let saved: { v?: number } = {}

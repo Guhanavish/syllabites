@@ -59,7 +59,7 @@ export function PublicOrder() {
       // Parcel menu is separate storage (parcel_items), staff items never leak here
       const list = await fetchMenu('parcel_items')
       setItems(list)
-      setCats(['All', ...Array.from(new Set(list.map((i) => i.category)))])
+      setCats(['All', ...Array.from(new Set(list.map((i) => i.category).filter((c) => c && c.trim() !== '')))])
       setMenuLoaded(true)
       setMenuError('')
     } catch {
@@ -82,12 +82,12 @@ export function PublicOrder() {
   }, [loadMenu])
 
   function addToCart(id: number, delta: number) {
+    // Public orders carry no stock limit: any quantity goes through.
     const it = items.find((x) => x.id === id)
-    if (!it) return
+    if (!it || it.available === false) return
     const cur = cart[String(id)] || 0
     const next = cur + delta
     if (next <= 0) { const n = { ...cart }; delete n[String(id)]; setCart(n); buzz(8); return }
-    if (next > it.stock) { toast(it.stock === 0 ? `"${it.name}" is out of stock` : `Only ${it.stock} left of "${it.name}"`, 'bad'); return }
     buzz(8)
     setCart({ ...cart, [String(id)]: next })
   }
@@ -202,24 +202,22 @@ export function PublicOrder() {
         ) : filtered.map(it => {
           const inCart = cart[String(it.id)] || 0
           return (
-            <div key={it.id} className={`item-row enter${it.stock === 0 ? ' out' : ''}`} style={{ animationDelay: '0s' }}>
+            <div key={it.id} className={`item-row enter${it.available === false ? ' out' : ''}`} style={{ animationDelay: '0s' }}>
               <div className="emoji-tile" role="img" aria-label={it.name}>{it.emoji}</div>
               <div className="item-info">
                 <div className="item-name">{it.name}</div>
                 <div className="item-cat">{it.category}</div>
                 <div className="item-price">{inr(it.price)}</div>
-                {it.stock === 0 ? <div className="stock-note out">Out of stock</div>
-                  : it.stock <= 5 ? <div className="stock-note low">Only {it.stock} left!</div>
-                    : <div className="stock-note ok">{it.stock} available</div>}
+                {it.available === false && <div className="stock-note out">Currently unavailable</div>}
               </div>
               {inCart > 0 ? (
                 <div className="stepper">
                   <button onClick={() => addToCart(it.id, -1)} aria-label={inCart <= 1 ? 'Remove from cart' : 'Decrease quantity'}>{inCart <= 1 ? <IconTrash size={15} /> : '−'}</button>
                   <span className="qty-val">{inCart}</span>
-                  <button onClick={() => addToCart(it.id, 1)}>+</button>
+                  <button onClick={() => addToCart(it.id, 1)} aria-label="Increase quantity">+</button>
                 </div>
               ) : (
-                <button className="add-btn" disabled={it.stock === 0} onClick={() => addToCart(it.id, 1)}>ADD +</button>
+                <button className="add-btn" disabled={it.available === false} onClick={() => addToCart(it.id, 1)}>ADD +</button>
               )}
             </div>
           )
