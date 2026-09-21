@@ -22,7 +22,8 @@
      renders a static orb. */
 
 import { useEffect, useRef } from 'react'
-import type { AnimationKey, AvatarController, ExpressionKey } from '@bible-strong/avatar-web'
+import { createAvatar, type AnimationKey, type AvatarController, type ExpressionKey } from '@bible-strong/avatar-web'
+import { toast } from '@/lib/ui'
 import definition from './orb/syllabi.avatar.json'
 
 const BASE: AnimationKey = 'idle'
@@ -321,30 +322,26 @@ export function OrbCompanion() {
     const fail = (msg: string) => {
       try { root.dataset.orbStatus = 'failed: ' + msg } catch {}
       try { (window as unknown as { __orbError?: string }).__orbError = msg } catch {}
-      try {
-        import('@/lib/ui').then((u) => u.toast('Syllabi engine: ' + msg, 'bad', 9000)).catch(() => {})
-      } catch {}
+      try { toast('Syllabi engine: ' + msg, 'bad', 12000) } catch {}
     }
-    let cancelled = false
-    import('@bible-strong/avatar-web').then((m) => {
-      if (cancelled || dead) return
-      try {
-        ctrl = reduced
-          ? m.createAvatar(mount, { definition, defaultExpression: 'neutral', autoplay: false, size: '100%', ariaLabel: 'Syllabi' })
-          : m.createAvatar(mount, { definition, defaultAnimation: BASE, size: '100%', ariaLabel: 'Syllabi, your canteen companion' })
-        mount.querySelector('.orb-fallback')?.remove()
-        try { root.dataset.orbStatus = 'ready' } catch {}
-        const g = mount.querySelector('svg g')
-        if (g) eyes = Array.from(g.querySelectorAll('path')) as SVGPathElement[]
-      } catch (ex) {
-        ctrl = null
-        fail('create: ' + (ex instanceof Error ? ex.message : String(ex)))
-      }
-      if (!reduced) {
-        pokeIdle()
-        raf = requestAnimationFrame(pupilLoop)
-      }
-    }).catch((ex) => { ctrl = null; fail('import: ' + (ex instanceof Error ? ex.message : String(ex))) })
+    /* Static import (bundled with the layout chunk): the engine is created
+       synchronously in-effect, so there is no separate chunk to fail. */
+    try {
+      ctrl = reduced
+        ? createAvatar(mount, { definition, defaultExpression: 'neutral', autoplay: false, size: '100%', ariaLabel: 'Syllabi' })
+        : createAvatar(mount, { definition, defaultAnimation: BASE, size: '100%', ariaLabel: 'Syllabi, your canteen companion' })
+      mount.querySelector('.orb-fallback')?.remove()
+      try { root.dataset.orbStatus = 'ready' } catch {}
+      const g = mount.querySelector('svg g')
+      if (g) eyes = Array.from(g.querySelectorAll('path')) as SVGPathElement[]
+    } catch (ex) {
+      ctrl = null
+      fail('create: ' + (ex instanceof Error ? ex.message : String(ex)))
+    }
+    if (!reduced) {
+      pokeIdle()
+      raf = requestAnimationFrame(pupilLoop)
+    }
 
     window.addEventListener('fc:orb-mood', onMood)
     window.addEventListener('fc:orb-focus', onFocus)
@@ -357,7 +354,6 @@ export function OrbCompanion() {
 
     return () => {
       dead = true
-      cancelled = true
       clearTimers()
       if (raf) cancelAnimationFrame(raf)
       window.removeEventListener('fc:orb-mood', onMood)
