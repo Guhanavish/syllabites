@@ -323,6 +323,7 @@ export function OrbCompanion() {
         ctrl = reduced
           ? m.createAvatar(mount, { definition, defaultExpression: 'neutral', autoplay: false, size: '100%', ariaLabel: 'Syllabi' })
           : m.createAvatar(mount, { definition, defaultAnimation: BASE, size: '100%', ariaLabel: 'Syllabi, your canteen companion' })
+        mount.querySelector('.orb-fallback')?.remove()
         const g = mount.querySelector('svg g')
         if (g) eyes = Array.from(g.querySelectorAll('path')) as SVGPathElement[]
       } catch { ctrl = null }
@@ -361,7 +362,14 @@ export function OrbCompanion() {
 
   return (
     <div ref={rootRef} className="orb-companion" aria-hidden="true">
-      <div ref={mountRef} className="orb-stage" />
+      <div ref={mountRef} className="orb-stage">
+        {/* Fallback face: paints instantly (SSR too) and stays if the
+            engine ever fails — removed once the avatar mounts. */}
+        <div className="orb-fallback">
+          <span className="orb-eye left" />
+          <span className="orb-eye right" />
+        </div>
+      </div>
     </div>
   )
 }
