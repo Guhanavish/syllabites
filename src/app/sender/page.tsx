@@ -6,7 +6,7 @@ import { db, fetchMenu } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { MenuItem, Order } from '@/lib/fmt'
-import { toast, buzz, chime, confirmBox, useOnline, every, lockGate } from '@/lib/ui'
+import { toast, buzz, chime, confirmBox, useOnline, every, lockGate, orbSay, orbFocus } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
 import { IconMenu, IconReceipt, IconSearch, IconDoor, IconBox, IconTrash, IconCheck, IconLock } from '@/components/icons'
 
@@ -127,6 +127,7 @@ export default function SenderPage() {
   async function sendOrder() {
     if (!totals.count || sending || !section) return
     setSending(true)
+    orbSay('thinking')
     const ct = crypto.randomUUID().replace(/-/g, '')
     try {
       const order = await api<Order>('/api/orders/place', {
@@ -140,8 +141,9 @@ export default function SenderPage() {
       saveTokens([{ t: ct, id: order.id }, ...tokensRef.current])
       setCart({})
       localStorage.removeItem(`fc.cart.${section}`)
-      buzz([30, 60, 30]); chime()
+      buzz([30, 60, 30]); chime(); orbSay('celebrate')
       setJustSent(order)
+      setTimeout(() => orbFocus('.success-token', 'celebrate', 4000), 450)
       loadMine()
     } catch (e: any) {
       toast(e.message || 'Could not send the order', 'bad', 3600)
@@ -157,7 +159,7 @@ export default function SenderPage() {
     const ct = loadTokens().find((x) => x.id === o.id)?.t || ''
     try {
       await api('/api/orders/cancel', { method: 'POST', body: { id: o.id, clientToken: ct } })
-      toast('Order cancelled', 'ok')
+      toast('Order cancelled', 'ok'); orbSay('sad')
       loadMine(); loadMenu()
     } catch (e: any) { toast(e.message, 'bad') }
   }
@@ -212,7 +214,7 @@ export default function SenderPage() {
           </div>
           <div className="chips-row">
             {cats.map((c) => (
-              <button key={c} className={`chip${c === cat ? ' on' : ''}`} onClick={() => setCat(c)}>{c}</button>
+              <button key={c} className={`chip${c === cat ? ' on' : ''}`} onClick={() => { if (c !== cat) orbSay('searching'); setCat(c) }}>{c}</button>
             ))}
           </div>
           <div className="divider-label">Menu</div>
@@ -245,7 +247,7 @@ export default function SenderPage() {
                       <button onClick={() => addToCart(it.id, +1)} aria-label="Increase quantity">+</button>
                     </div>
                   ) : (
-                    <button className="add-btn" disabled={!it.available} onClick={() => addToCart(it.id, +1)}>ADD +</button>
+                    <button className="add-btn" disabled={!it.available} data-orb="playful" onClick={() => addToCart(it.id, +1)}>ADD +</button>
                   )}
                 </div>
               )

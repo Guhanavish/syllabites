@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { api, isSessionExpired } from '@/lib/client'
-import { toast, buzz, useOnline } from '@/lib/ui'
+import { toast, buzz, useOnline, orbSay } from '@/lib/ui'
 import { IconChart, IconEdit, IconReceipt, IconGear, IconDoor, IconLock } from '@/components/icons'
 
 /* Code-split below-the-fold tabs so the first admin paint ships less JS. */
@@ -126,6 +126,7 @@ function Login({ notice, onSuccess }: { notice?: string; onSuccess: () => void }
       onSuccess()
     } catch (ex: any) {
       setErr(ex.message || 'Login failed')
+      orbSay('suspicious')
     } finally {
       setBusy(false)
     }

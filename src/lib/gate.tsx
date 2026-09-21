@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { usePathname } from 'next/navigation'
 import { api } from '@/lib/client'
-import { toast } from '@/lib/ui'
+import { toast, orbSay } from '@/lib/ui'
 import { warmCritical } from '@/lib/db'
 import { BrandHero, Credits } from '@/components/brand'
 import dynamic from 'next/dynamic'
@@ -67,6 +67,7 @@ export function GateLock({ children }: { children: ReactNode }) {
   function unlock(version: number) {
     localStorage.setItem('fc.gate', JSON.stringify({ v: version }))
     buzzIn()
+    orbSay('happy')
     setState('open')
   }
 
@@ -80,6 +81,7 @@ export function GateLock({ children }: { children: ReactNode }) {
       unlock(r.version)
     } catch (ex: any) {
       setErr(ex.message || 'Wrong password')
+      orbSay('angry')
     } finally { setBusy(false) }
   }
 
@@ -113,8 +115,8 @@ export function GateLock({ children }: { children: ReactNode }) {
             <h2 className="welcome-title">Welcome to Syllabites</h2>
             <p className="welcome-sub">Choose how you&apos;d like to continue.</p>
             <div className="welcome-actions">
-              <button className="btn btn-primary xl block" onClick={() => setGateTab('order')}>Place Order</button>
-              <button className="btn btn-dark xl block" onClick={() => setGateTab('staff')}>Staff Access</button>
+              <button className="btn btn-primary xl block" data-orb="excited" onClick={() => setGateTab('order')}>Place Order</button>
+              <button className="btn btn-dark xl block" data-orb="excited" onClick={() => setGateTab('staff')}>Staff Access</button>
             </div>
           </div>
           <Credits />
@@ -181,7 +183,7 @@ export function GateLock({ children }: { children: ReactNode }) {
               <input id="gate-pw" name="pw" type="password" autoComplete="current-password" placeholder="••••••••" autoFocus aria-describedby="gate-pw-hint" />
               <div className="hint" id="gate-pw-hint">Shared password for all counters. Ask a volunteer if you don&apos;t know it.</div>
             </div>
-            <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy}>Unlock</button>
+            <button className={`btn btn-primary xl block${busy ? ' loading' : ''}`} disabled={busy} data-orb="thinking">Unlock</button>
           </form>
           <div className="gate-alt">
             <button className="admin-link" onClick={() => { setMode({ kind: 'reset' }); setErr('') }}>Forgot password?</button>

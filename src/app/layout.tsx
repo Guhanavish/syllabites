@@ -3,6 +3,7 @@ import './globals.css'
 import { UiHost } from '@/lib/ui'
 import { GateLock } from '@/lib/gate'
 import { CookieNotice } from '@/components/cookie-notice'
+import { OrbCompanion } from '@/components/OrbCompanion'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://syllabites.vercel.app'),
@@ -74,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </GateLock>
           <UiHost />
           <CookieNotice />
+          <OrbCompanion />
         </div>
       </body>
     </html>

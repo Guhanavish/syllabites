@@ -6,7 +6,7 @@ import { db } from '@/lib/db'
 import { api } from '@/lib/client'
 import { inr, ordNo, timeAgo, clockTime, statusPill, statusCls } from '@/lib/fmt'
 import type { Order } from '@/lib/fmt'
-import { toast, buzz, chime, confirmBox, every, lockGate } from '@/lib/ui'
+import { toast, buzz, chime, confirmBox, every, lockGate, orbSay } from '@/lib/ui'
 import { startDeviceHeartbeat } from '@/lib/device'
 import { IconReceipt, IconBox, IconCheck, IconSearch, IconBell, IconBellOff, IconDoor, IconLock } from '@/components/icons'
 
@@ -135,6 +135,7 @@ export default function ReceiverPage() {
   async function serve(o: Order) {
     if (pendingIds.has(o.id)) return
     const code = ordNo(o)
+    orbSay('working')
     // optimistic: remove card instantly and block double-taps
     setBoard((prev) => ({ ...prev, active: prev.active.filter((x) => x.id !== o.id) }))
     setPendingIds((prev) => new Set(prev).add(o.id))
@@ -164,7 +165,7 @@ export default function ReceiverPage() {
     if (!ok) return
     try {
       await api('/api/orders/cancel', { method: 'POST', body: { id: o.id } })
-      toast('Order cancelled · stock restored', 'ok')
+      toast('Order cancelled · stock restored', 'ok'); orbSay('sad')
       load()
     } catch (e: any) { toast(e.message, 'bad'); load() }
   }
@@ -175,6 +176,7 @@ export default function ReceiverPage() {
     // optimistic: remove card instantly and block double-taps
     setParcel((prev) => ({ ...prev, active: prev.active.filter((x) => x.id !== o.id) }))
     setPendingParcel((prev) => new Set(prev).add(o.id))
+    orbSay('working')
     try {
       const res: any = await api('/api/parcel/serve', { method: 'POST', body: { id: o.id, status: 'completed' } })
       buzz(15)
@@ -201,7 +203,7 @@ export default function ReceiverPage() {
     if (!ok) return
     try {
       await api('/api/parcel/serve', { method: 'POST', body: { id: o.id, status: 'cancelled' } })
-      toast('Parcel cancelled · stock restored', 'ok')
+      toast('Parcel cancelled · stock restored', 'ok'); orbSay('sad')
       loadParcel()
     } catch (e: any) { toast(e.message, 'bad'); loadParcel() }
   }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { api, isSessionExpired } from '@/lib/client'
-import { toast } from '@/lib/ui'
+import { toast, orbSay } from '@/lib/ui'
 import { confirmBox } from '@/lib/ui'
 
 type Backup = { id: number; label: string; createdAt: string; items: number; orders: number; parcelItems?: number; publicOrders?: number }
@@ -70,7 +70,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
   async function startOffer() {
     try {
       const r = await api('/api/admin/offer/start', { method: 'POST' })
-      toast('Offer started: 3 lucky orders will get 5-10% off', 'ok')
+      toast('Offer started: 3 lucky orders will get 5-10% off', 'ok'); orbSay('laughing')
       loadOffer()
     } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
   }
@@ -108,6 +108,7 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       const elapsed = (Date.now() - t0) / 1000
       setBackupPct((p) => Math.min(90, p + Math.max(0.4, 3 - elapsed * 0.06)))
     }, 250)
+    orbSay('thinking')
     try {
       const r = await api<{ backupId?: number; id?: number }>('/api/admin/backups/create', {
         method: 'POST', body: { label: 'Manual backup' },
@@ -115,13 +116,14 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
       clearInterval(timer)
       setBackupPct(100)
       toast(`Backup #${r.backupId ?? r.id} saved on the server`, 'ok')
+      orbSay('proud')
       loadBackups()
       setTimeout(() => { setBackupBusy(false); setBackupPct(0) }, 900)
     } catch (e: any) {
       clearInterval(timer)
       setBackupBusy(false)
       setBackupPct(0)
-      if (!expired(e)) toast(e.message, 'bad')
+      if (!expired(e)) { toast(e.message, 'bad'); orbSay('angry') }
     }
   }
 
@@ -144,8 +146,9 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         method: 'POST', body: { label: 'Fresh start' },
       })
       toast(`Saved as backup #${r.backupId} (${r.backedUpItems} items, ${r.backedUpOrders} orders) then wiped`, 'ok', 5000)
+      orbSay('proud')
       loadBackups()
-    } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
+    } catch (e: any) { if (!expired(e)) { toast(e.message, 'bad'); orbSay('angry') } }
   }
 
   async function importBackup(b: Backup) {
@@ -161,8 +164,9 @@ export function SettingsTab({ expired, onLogout }: { expired: (e: any) => boolea
         method: 'POST', body: { id: b.id },
       })
       toast(`Imported ${r.items} items & ${r.orders} orders · current data saved as backup #${r.safetyBackupId}`, 'ok', 6000)
+      orbSay('proud')
       loadBackups()
-    } catch (e: any) { if (!expired(e)) toast(e.message, 'bad') }
+    } catch (e: any) { if (!expired(e)) { toast(e.message, 'bad'); orbSay('angry') } }
   }
 
   return (

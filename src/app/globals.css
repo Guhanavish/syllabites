@@ -899,6 +899,34 @@ h1, h2, h3, h4, p { margin: 0; }
 .toast.hide { opacity: 0; transform: translateY(8px); transition: opacity .3s, transform .3s; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(14px) scale(.94); } to { opacity: 1; transform: none; } }
 
+/* Syllabi orb companion: absolute inside the phone column so it follows
+   the column on desktop; above content/cart, below sheets and dialogs.
+   Positioned right-edge above the toast zone; glides via transform only. */
+.orb-companion {
+  position: absolute;
+  left: 12px;
+  bottom: calc(var(--nav-h) + var(--sab) + 122px);
+  width: 84px; height: 84px;
+  z-index: 30;
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform .6s cubic-bezier(.3,.7,.3,1);
+  filter: drop-shadow(0 8px 20px rgba(232,72,12,.35)) drop-shadow(0 2px 6px rgba(36,23,8,.35));
+  animation: orbIn .45s cubic-bezier(.2,.9,.3,1.2);
+}
+.orb-stage { width: 100%; height: 100%; transition: transform .18s ease-out; }
+/* Anchor for the orb's access-code orbit (no visual change). */
+.place-code { scroll-margin-top: 12px; }
+.orb-companion:active .orb-stage { transform: scale(.9); }
+@keyframes orbIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 359px) {
+  .orb-companion { width: 72px; height: 72px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-companion { transition: none; animation: none; }
+}
+
 .offline-bar {
   position: absolute; top: 0; left: 0; right: 0;
   background: #7f1d1d; color: #fecaca;

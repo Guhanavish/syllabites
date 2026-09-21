@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { db, fetchMenu } from '@/lib/db'
 import { inr } from '@/lib/fmt'
-import { toast, buzz, chime, useOnline, every } from '@/lib/ui'
+import { toast, buzz, chime, useOnline, every, orbSay, orbOrbit } from '@/lib/ui'
 import type { MenuItem } from '@/lib/fmt'
 import { IconSearch, IconBox, IconTrash, IconCheck } from '@/components/icons'
 
@@ -116,6 +116,7 @@ export function PublicOrder() {
       toast('Please fill Name, Class, Section and Event', 'bad'); return
     }
     setSending(true)
+    orbSay('thinking')
     try {
       const res = await fetch('/api/public/place', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -129,7 +130,8 @@ export function PublicOrder() {
       if (!res.ok) throw new Error(data.error || 'Could not place order')
       setPlaced({ id: data.id, code: data.code, total: data.total, originalTotal: data.originalTotal, discountPercent: data.discountPercent, discountAmount: data.discountAmount, isDiscounted: data.isDiscounted, items: data.items })
       setCart({})
-      chime(); buzz([30, 60, 30])
+      chime(); buzz([30, 60, 30]); orbSay(data.isDiscounted ? 'laughing' : 'celebrate')
+      setTimeout(() => orbOrbit('.place-code', data.isDiscounted ? 'laughing' : 'celebrate'), 450)
     } catch (e: any) {
       toast(e.message || 'Could not place order', 'bad', 3600); loadMenu()
     } finally { setSending(false) }
@@ -150,7 +152,7 @@ export function PublicOrder() {
           <h2 style={{ fontSize: 20, fontWeight: 900, marginTop: 14 }}>Order placed!</h2>
           <p style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 13, marginTop: 6 }}>Show this code at the counter.<br />Only you see it here.</p>
         </div>
-        <div className="card pad" style={{ textAlign: 'center', marginTop: 16 }}>
+        <div className="card pad place-code" style={{ textAlign: 'center', marginTop: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.14em', color: 'var(--muted)' }}>YOUR CODE</div>
           <div style={{ fontSize: 42, fontWeight: 900, letterSpacing: '.18em', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>{placed.code}</div>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>
@@ -187,7 +189,7 @@ export function PublicOrder() {
         <input type="text" placeholder="Search food…" value={q} onChange={e => setQ(e.target.value)} autoComplete="off" />
       </div>
       <div className="chips-row" style={{ marginTop: 10 }}>
-        {cats.map(c => <button key={c} className={`chip${c === cat ? ' on' : ''}`} onClick={() => setCat(c)}>{c}</button>)}
+        {cats.map(c => <button key={c} className={`chip${c === cat ? ' on' : ''}`} onClick={() => { if (c !== cat) orbSay('searching'); setCat(c) }}>{c}</button>)}
       </div>
       <div className="divider-label">Menu</div>
       <div className="menu-list" style={{ paddingBottom: totals.count ? 90 : 0 }}>
@@ -217,7 +219,7 @@ export function PublicOrder() {
                   <button onClick={() => addToCart(it.id, 1)} aria-label="Increase quantity">+</button>
                 </div>
               ) : (
-                <button className="add-btn" disabled={it.available === false} onClick={() => addToCart(it.id, 1)}>ADD +</button>
+                <button className="add-btn" disabled={it.available === false} data-orb="playful" onClick={() => addToCart(it.id, 1)}>ADD +</button>
               )}
             </div>
           )

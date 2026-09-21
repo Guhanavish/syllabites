@@ -132,9 +132,9 @@ export function MenuTab({ expired }: { expired: (e: any) => boolean }) {
               </div>
             </div>
             <div className="row-actions">
-              <button className={`avail-switch${it.available ? ' on' : ''}`} onClick={() => toggle(it)} aria-label="Available" />
+              <button className={`avail-switch${it.available ? ' on' : ''}`} data-orb="suspicious" onClick={() => toggle(it)} aria-label="Available" />
               <button className="ra-btn" onClick={() => sheet(it)} aria-label={`Edit ${it.name}`}><IconEdit size={16} /></button>
-              <button className="ra-btn" onClick={() => del(it)} aria-label={`Delete ${it.name}`}><IconTrash size={16} /></button>
+              <button className="ra-btn" data-orb="angry" onClick={() => del(it)} aria-label={`Delete ${it.name}`}><IconTrash size={16} /></button>
             </div>
           </div>
         ))

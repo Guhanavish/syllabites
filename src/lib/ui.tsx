@@ -5,7 +5,7 @@
    no provider needed. */
 
 import { useSyncExternalStore } from 'react'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 type Toast = { id: number; msg: string; kind: '' | 'ok' | 'bad' }
 type SheetState = { open: boolean; content: ReactNode | null }
@@ -57,10 +57,31 @@ export function lockGate() {
   try { window.dispatchEvent(new Event('fc:lock')) } catch {}
 }
 
+/* Orb companion moods. toast() auto-fires these so the orb reacts to
+   every interaction with zero call-site changes; explicit orbSay() calls
+   cover successes that don't toast (order placement). */
+export type OrbMood = 'celebrate' | 'happy' | 'confused' | 'curious' | 'listening' | 'thinking' | 'searching' | 'working' | 'excited' | 'suspicious' | 'angry' | 'proud' | 'shy' | 'sad' | 'laughing' | 'scared' | 'playful'
+export function orbSay(mood: OrbMood) {
+  try { window.dispatchEvent(new CustomEvent('fc:orb-mood', { detail: mood })) } catch {}
+}
+/* Glide the orb next to a result element and stare at it for dwellMs. */
+export function orbFocus(selector: string, mood: OrbMood, dwellMs = 4000) {
+  try { window.dispatchEvent(new CustomEvent('fc:orb-focus', { detail: { selector, mood, dwellMs } })) } catch {}
+}
+/* Circle an element (parcel access code) for ~3s, then release. */
+export function orbOrbit(selector: string, mood: OrbMood) {
+  try { window.dispatchEvent(new CustomEvent('fc:orb-orbit', { detail: { selector, mood } })) } catch {}
+}
+
 export function toast(msg: string, kind: '' | 'ok' | 'bad' = '', ms = 2600) {
   const t: Toast = { id: Date.now() + Math.random(), msg, kind }
   toasts = [...toasts, t]
   emit()
+  try {
+    if (kind === 'ok') orbSay('happy')
+    else if (kind === 'bad') orbSay('confused')
+    else orbSay(msg.startsWith('New ') ? 'excited' : 'listening')
+  } catch {}
   setTimeout(() => {
     toasts = toasts.filter((x) => x.id !== t.id)
     emit()
@@ -148,10 +169,11 @@ export function UiHost() {  const t = useSyncExternalStore(subscribe, getToasts,
   const sh = useSyncExternalStore(subscribe, getSheet, getSheet)
   const cf = useSyncExternalStore(subscribe, getConfirm, getConfirm)
   const [online, setOnline] = useState(true)
+  const wasOff = useRef(false)
 
   useEffect(() => {
-    const up = () => setOnline(true)
-    const down = () => setOnline(false)
+    const up = () => { setOnline(true); if (wasOff.current) { wasOff.current = false; orbSay('happy') } }
+    const down = () => { wasOff.current = true; setOnline(false); orbSay('scared') }
     window.addEventListener('online', up)
     window.addEventListener('offline', down)
     setOnline(navigator.onLine)

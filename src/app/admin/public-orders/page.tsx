@@ -136,7 +136,7 @@ export default function PublicOrdersPage() {
           {selected.size > 0 && (
             <button className="btn btn-ghost sm" onClick={() => setSelected(new Set())}>Clear</button>
           )}
-          <button className="btn btn-primary sm" disabled={selected.size === 0} onClick={() => window.print()}>
+          <button className="btn btn-primary sm" disabled={selected.size === 0} data-orb="proud" onClick={() => window.print()}>
             PDF{selected.size > 0 ? ` (${selected.size})` : ''}
           </button>
         </div>
