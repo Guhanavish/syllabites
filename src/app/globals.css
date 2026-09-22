@@ -918,24 +918,8 @@ h1, h2, h3, h4, p { margin: 0; }
 .orb-stage { width: 100%; height: 100%; transition: transform .18s ease-out; }
 /* Anchor for the orb's access-code orbit (no visual change). */
 .place-code { scroll-margin-top: 12px; }
-/* Fallback face: persimmon orb with blinking espresso eyes. Renders with
-   SSR so something is always visible; removed once the engine mounts. */
-.orb-fallback {
-  width: 100%; height: 100%; border-radius: 50%; position: relative;
-  background: radial-gradient(circle at 35% 28%, #f4570e 0%, #e8480c 55%, #d63a00 100%);
-  box-shadow: inset -6px -10px 18px rgba(43,23,8,.35), inset 4px 6px 12px rgba(255,255,255,.25);
-  animation: orbBob 3.2s ease-in-out infinite;
-}
-.orb-eye {
-  position: absolute; top: 36%; width: 10px; height: 24px; border-radius: 6px;
-  background: #2b1708;
-  animation: orbBlink 4.2s ease-in-out infinite;
-  transform-origin: center;
-}
-.orb-eye.left { left: 29%; }
-.orb-eye.right { right: 29%; }
-@keyframes orbBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-@keyframes orbBlink { 0%,91%,100% { transform: scaleY(1); } 94% { transform: scaleY(.08); } }
+/* Native orb canvas: the live SVG fills the stage. */
+.orb-svg { display: block; width: 100%; height: 100%; }
 .orb-companion:active .orb-stage { transform: scale(.9); }
 @keyframes orbIn { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: scale(1); } }
 @media (max-width: 359px) {
@@ -943,7 +927,6 @@ h1, h2, h3, h4, p { margin: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .orb-companion { transition: none; animation: none; }
-  .orb-fallback, .orb-eye { animation: none; }
 }
 
 .offline-bar {
